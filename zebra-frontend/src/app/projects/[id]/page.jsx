@@ -179,54 +179,59 @@ export default function ProjectPage() {
 
                         {record.files?.length > 0 && (
                           <div className="space-y-2 mb-2">
-                            <p className="text-sm font-medium">Attachments:</p>
-                            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                            <p className="text-sm font-medium text-gray-600">Attachments:</p>
+                            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                               {record.files.map((file, fileIndex) => (
                                 <div
                                   key={fileIndex}
-                                  className="flex flex-col gap-2 bg-gray-50 p-3 rounded"
+                                  className="group relative flex flex-col gap-2 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow duration-200"
                                 >
-                                  <div className="flex items-center gap-2">
-                                    {file.type.startsWith('image/') ? (
-                                      <ImageIcon className="h-4 w-4" />
-                                    ) : file.type.startsWith('audio/') ? (
-                                      <FileAudio className="h-4 w-4" />
-                                    ) : (
-                                      <FileIcon className="h-4 w-4" />
-                                    )}
-                                    <div className="flex-1">
-                                      <p className="font-medium truncate">{file.name}</p>
-                                      <p className="text-gray-500 text-xs">
-                                        {formatFileSize(file.size)}
-                                      </p>
-                                    </div>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDownload(file)}
-                                    >
-                                      <Download className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                  {file.previewUrl && file.type.startsWith('image/') && (
+                                  {file.type.startsWith('image/') ? (
                                     <div 
-                                      className="relative cursor-pointer group"
+                                      className="relative aspect-[4/3] cursor-pointer overflow-hidden bg-gray-50"
                                       onClick={() => setSelectedImage(file)}
                                     >
                                       <img 
                                         src={file.previewUrl}
                                         alt={file.name}
-                                        className="w-full h-48 object-cover rounded"
+                                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                       />
-                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all flex items-center justify-center">
-                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <Button variant="secondary" size="sm">
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200 flex items-center justify-center">
+                                        <div className="opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-200">
+                                          <Button variant="secondary" size="sm" className="shadow-lg">
                                             View Full Size
                                           </Button>
                                         </div>
                                       </div>
                                     </div>
+                                  ) : (
+                                    <div className="aspect-[4/3] flex items-center justify-center bg-gray-50 p-4">
+                                      {file.type.startsWith('audio/') ? (
+                                        <FileAudio className="h-12 w-12 text-gray-400" />
+                                      ) : (
+                                        <FileIcon className="h-12 w-12 text-gray-400" />
+                                      )}
+                                    </div>
                                   )}
+                                  
+                                  <div className="p-3 flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-sm text-gray-900 truncate">
+                                        {file.name}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-0.5">
+                                        {formatFileSize(file.size)}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDownload(file)}
+                                      className="shrink-0 text-gray-500 hover:text-gray-900"
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
