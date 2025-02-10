@@ -13,7 +13,13 @@ import {
 export default function ProjectSelector() {
   const [newProjectName, setNewProjectName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const { projects, currentProjectId, addProject, setCurrentProject } = useStore();
+  const { 
+    projects, 
+    currentProject, 
+    addProject, 
+    setCurrentProject,
+    getCurrentProject 
+  } = useStore();
 
   const handleCreateProject = () => {
     if (newProjectName.trim()) {
@@ -23,6 +29,16 @@ export default function ProjectSelector() {
     }
   };
 
+  // Create initial project if none exists
+  if (projects.length === 0 && !isCreating) {
+    return (
+      <div className="text-center">
+        <p className="text-gray-500 mb-4">Create your first project to get started</p>
+        <Button onClick={() => setIsCreating(true)}>Create Project</Button>
+      </div>
+    );
+  }
+
   if (isCreating) {
     return (
       <div className="flex gap-2">
@@ -31,6 +47,11 @@ export default function ProjectSelector() {
           onChange={(e) => setNewProjectName(e.target.value)}
           placeholder="Project name"
           className="max-w-[200px]"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleCreateProject();
+            }
+          }}
         />
         <Button onClick={handleCreateProject} disabled={!newProjectName.trim()}>
           Create
@@ -41,6 +62,8 @@ export default function ProjectSelector() {
       </div>
     );
   }
+
+  const currentProjectId = currentProject?.id || getCurrentProject()?.id;
 
   return (
     <div className="flex gap-2 items-center">

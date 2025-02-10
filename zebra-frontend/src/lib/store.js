@@ -7,92 +7,148 @@ const useStore = create(
       // Timer state
       isRunning: false,
       startTime: null,
-      elapsedTime: 0,
-      currentSessionId: null,
+      currentSession: null,
 
       // Projects state
       projects: [],
-      currentProjectId: null,
-
-      // Sessions state
       sessions: [],
+      records: [],
+      
+      // Files and audio state
+      files: {}, // { recordId: { files: [], audioBlob: Blob } }
 
       // Timer actions
       startTimer: () => {
-        const now = Date.now();
-        const sessionId = `session_${now}`;
+        const currentProject = get().getCurrentProject();
+        if (!currentProject) return;
+
+        const session = {
+          id: Math.random().toString(36).substr(2, 9),
+          projectId: currentProject.id,
+          startTime: Date.now(),
+          duration: 0,
+          records: [],
+        };
+
         set({
           isRunning: true,
-          startTime: now,
-          currentSessionId: sessionId,
-          sessions: [...get().sessions, {
-            id: sessionId,
-            projectId: get().currentProjectId,
-            startTime: now,
-            records: [],
-          }],
+          startTime: Date.now(),
+          currentSession: session,
         });
       },
 
       stopTimer: () => {
-        const { currentSessionId, sessions, startTime } = get();
-        const now = Date.now();
-        set({
+        const { currentSession, startTime } = get();
+        if (!currentSession || !startTime) return;
+
+        const duration = Date.now() - startTime;
+        const updatedSession = {
+          ...currentSession,
+          duration,
+        };
+
+        set((state) => ({
           isRunning: false,
-          elapsedTime: 0,
           startTime: null,
-          sessions: sessions.map(session =>
-            session.id === currentSessionId
-              ? { ...session, endTime: now, duration: now - startTime }
-              : session
-          ),
-          currentSessionId: null,
-        });
+          currentSession: null,
+          sessions: [...state.sessions, updatedSession],
+        }));
       },
 
       // Project actions
       addProject: (name) => {
-        const id = `project_${Date.now()}`;
-        set(state => ({
-          projects: [...state.projects, { id, name, createdAt: Date.now() }],
-          currentProjectId: id,
+        const project = {
+          id: Math.random().toString(36).substr(2, 9),
+          name,
+          createdAt: Date.now(),
+        };
+
+        set((state) => ({
+          projects: [...state.projects, project],
+          currentProject: project,
         }));
-        return id;
+
+        return project;
       },
 
       setCurrentProject: (projectId) => {
-        set({ currentProjectId: projectId });
+        const project = get().projects.find((p) => p.id === projectId);
+        if (project) {
+          set({ currentProject: project });
+        }
+      },
+
+      getCurrentProject: () => {
+        const { currentProject, projects } = get();
+        if (currentProject) return currentProject;
+        if (projects.length > 0) {
+          const lastProject = projects[projects.length - 1];
+          set({ currentProject: lastProject });
+          return lastProject;
+        }
+        return null;
+      },
+
+      getProjectById: (id) => {
+        return get().projects.find((p) => p.id === id);
       },
 
       // Session actions
-      addRecord: (record) => {
-        const { currentSessionId, sessions } = get();
-        if (!currentSessionId) return;
-
-        set({
-          sessions: sessions.map(session =>
-            session.id === currentSessionId
-              ? { ...session, records: [...session.records, { ...record, timestamp: Date.now() }] }
-              : session
-          ),
-        });
-      },
-
-      // Utility functions
-      getProjectById: (projectId) => {
-        return get().projects.find(p => p.id === projectId);
-      },
-
       getSessionsByProjectId: (projectId) => {
-        return get().sessions.filter(s => s.projectId === projectId);
+        return get()
+          .sessions.filter((s) => s.projectId === projectId)
+          .sort((a, b) => b.startTime - a.startTime);
       },
 
-      getCurrentSession: () => {
-        return get().sessions.find(s => s.id === get().currentSessionId);
+      // Record actions
+      addRecord: (record) => {
+        const { currentSession } = get();
+        if (!currentSession) return;
+
+        const newRecord = {
+          ...record,
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+        };
+
+        // Store files and audio in the files object
+        if ((record.files?.length > 0 || record.audioBlob) && newRecord.id) {
+          set((state) => ({
+            files: {
+              ...state.files,
+              [newRecord.id]: {
+                files: record.files || [],
+                audioBlob: record.audioBlob,
+              },
+            },
+          }));
+        }
+
+        set((state) => ({
+          currentSession: {
+            ...state.currentSession,
+            records: [...(state.currentSession.records || []), newRecord],
+          },
+        }));
+      },
+
+      // File and audio actions
+      getRecordFiles: (recordId) => {
+        return get().files[recordId]?.files || [];
+      },
+
+      getRecordAudio: (recordId) => {
+        return get().files[recordId]?.audioBlob || null;
       },
     }),
     {
-      name: 'zebra-storage',
+      name: 'zebra-store',
+      partialize: (state) => ({
+        projects: state.projects,
+        sessions: state.sessions,
+        currentProject: state.currentProject,
+        files: state.files,
+      }),
     }
   )
 );
