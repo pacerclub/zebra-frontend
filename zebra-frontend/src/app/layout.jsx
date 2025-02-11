@@ -1,4 +1,4 @@
-"use client"; // Required because useTheme is client-side
+"use client"; 
 
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
@@ -19,6 +19,7 @@ export default function RootLayout({ children }) {
               <div className="flex items-center gap-6">
                 <a href="/dashboard" className="text-sm font-medium hover:text-gray-900">Dashboard</a>
                 <a href="/" className="text-sm font-medium hover:text-gray-900">Timer</a>
+                <a href="/logs" className="text-sm font-medium hover:text-gray-900">Worklogs</a>
                 <a href="/projects" className="text-sm font-medium hover:text-gray-900">Projects</a>
                 <ThemeToggle /> {/* Theme toggle button */}
               </div>
