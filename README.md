@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Zebra
 
-## Getting Started
+A modern time tracking application built with Next.js that helps professionals monitor and analyze their work hours across projects.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Time tracking with start/stop functionality
+- Project-based organization of time entries
+- Visual analytics with contribution-style heatmap
+- Session notes and attachments support
+- Dark mode support
+- Responsive design
+
+## Development
+
+### Prerequisites
+
+- Node.js (LTS version recommended)
+- npm or yarn
+
+### Setup
+
+1. Clone the repository
+   ```bash
+   git clone https://github.com/yourusername/zebra-frontend.git
+   cd zebra-frontend
+   ```
+
+2. Install dependencies
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
+
+3. Start development server
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
+
+The application will be available at [http://localhost:3000](http://localhost:3000).
+
+## Architecture
+
+### Technology Stack
+
+- Next.js - React framework
+- Tailwind CSS - Styling
+- Zustand - State management
+- date-fns - Date manipulation
+- Lucide React - Icons
+
+### Project Structure
+
+```
+/
+├── src/
+│   ├── app/          # Next.js app router pages
+│   ├── components/   # React components
+│   └── lib/          # Utilities and store
+├── public/           # Static assets
+└── ...config files
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Contributing
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Contributions are welcome. Please feel free to submit a Pull Request.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## License
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is licensed under the GNU Affero General Public License - see the [LICENSE](LICENSE) file for details.
