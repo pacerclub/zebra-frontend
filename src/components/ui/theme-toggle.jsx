@@ -39,8 +39,13 @@ function ThemeToggle() {
       variant="ghost" 
       onClick={() => setDarkMode(!darkMode)}
       title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+      className="hover:bg-secondary/80"
     >
-      {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      {darkMode ? (
+        <Sun className="h-[1.2rem] w-[1.2rem]" />
+      ) : (
+        <Moon className="h-[1.2rem] w-[1.2rem]" />
+      )}
     </Button>
   );
 }

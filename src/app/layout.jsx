@@ -17,9 +17,9 @@ export default function RootLayout({ children }) {
                 <span className="font-semibold text-xl">Zebra</span>
               </a>
               <div className="flex items-center gap-6">
-                <a href="/dashboard" className="text-sm font-medium hover:text-gray-900">Dashboard</a>
-                <a href="/" className="text-sm font-medium hover:text-gray-900">Timer</a>
-                <a href="/projects" className="text-sm font-medium hover:text-gray-900">Projects</a>
+                <a href="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Dashboard</a>
+                <a href="/" className="text-sm font-medium transition-colors hover:text-primary">Timer</a>
+                <a href="/projects" className="text-sm font-medium transition-colors hover:text-primary">Projects</a>
                 <ThemeToggle /> {/* Theme toggle button */}
               </div>
             </nav>
