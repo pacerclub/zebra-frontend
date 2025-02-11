@@ -1,9 +1,38 @@
+'use client'
+
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 
 export default function Dashboard() {
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    let timer;
+    if (isRunning) {
+      timer = setInterval(() => {
+        setTime((prevTime) => prevTime + 1);
+      }, 1000);
+    } else {
+      clearInterval(timer);
+    }
+    return () => clearInterval(timer);
+  }, [isRunning]);
+
+  const formatTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600)
+      .toString()
+      .padStart(2, "0");
+    const mins = Math.floor((seconds % 3600) / 60)
+      .toString()
+      .padStart(2, "0");
+    const secs = (seconds % 60).toString().padStart(2, "0");
+    return `${hrs}:${mins}:${secs}`;
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
@@ -22,10 +51,21 @@ export default function Dashboard() {
             <CardTitle>Current Session</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-mono mb-4">00:00:00</div>
+            <div className="text-3xl font-mono mb-4">{formatTime(time)}</div>
             <div className="flex gap-2">
-              <Button className="w-full">Start</Button>
-              <Button variant="outline" className="w-full">Reset</Button>
+              <Button className="w-full" onClick={() => setIsRunning(!isRunning)}>
+                {isRunning ? "Pause" : "Start"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setTime(0);
+                  setIsRunning(false);
+                }}
+              >
+                Reset
+              </Button>
             </div>
           </CardContent>
         </Card>
