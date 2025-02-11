@@ -56,8 +56,9 @@ export default function Timer() {
     stopTimer();
     setShowConfirmDialog(false);
     setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 5000); // Hide confetti after 5 seconds
-  };
+    setDisplay("00:00:00"); 
+    setTimeout(() => setShowConfetti(false), 5000); 
+  };  
 
   return (
     <>
@@ -66,8 +67,8 @@ export default function Timer() {
           width={window.innerWidth}
           height={window.innerHeight}
           recycle={false}
-          numberOfPieces={500}
-          gravity={0.2}
+          numberOfPieces={300}
+          gravity={0.9}
         />
       )}
       
