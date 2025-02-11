@@ -1,9 +1,7 @@
-"use client"
-
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import ThemeToggle from "@/components/ui/theme-toggle";
 
 export default function Dashboard() {
   return (
@@ -11,8 +9,9 @@ export default function Dashboard() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex gap-4">
-          <ThemeToggle />
-          <Button size="lg">Start New Session</Button>
+          <Link href="/">
+            <Button size="lg">Start New Session</Button>
+          </Link>
         </div>
       </div>
 
