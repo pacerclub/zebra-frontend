@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileIcon, Image as ImageIcon, FileAudio, Play, Pause, ExternalLink, Download } from 'lucide-react';
 import ImagePreviewModal from '@/components/ImagePreviewModal';
+import TimeHeatmap from '@/components/TimeHeatmap';
 
 export default function ProjectPage() {
   const params = useParams();
@@ -137,6 +138,12 @@ export default function ProjectPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="mb-8">
+          <CardContent className="pt-6">
+            <TimeHeatmap sessions={sessions} />
+          </CardContent>
+        </Card>
 
         <div className="space-y-6">
           <h2 className="text-2xl font-semibold mb-4">Sessions</h2>
