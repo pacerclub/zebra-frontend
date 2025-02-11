@@ -1,194 +1,136 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import useStore from '@/lib/store';
+import TimeHeatmap from '@/components/TimeHeatmap';
+import { format, subDays } from 'date-fns';
 
-export default function Dashboard() {
-  const [time, setTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
+export default function DashboardPage() {
+  const store = useStore();
+  const [stats, setStats] = useState({
+    totalTime: 0,
+    totalSessions: 0,
+    avgSessionTime: 0,
+    activeProjects: 0,
+  });
 
   useEffect(() => {
-    let timer;
-    if (isRunning) {
-      timer = setInterval(() => {
-        setTime((prevTime) => prevTime + 1);
-      }, 1000);
-    } else {
-      clearInterval(timer);
-    }
-    return () => clearInterval(timer);
-  }, [isRunning]);
+    // Get all projects from the store's projects array
+    const projects = store.projects;
+    
+    // Gather all sessions
+    const sessions = projects.flatMap(project => 
+      store.getSessionsByProjectId(project.id)
+    );
 
-  const formatTime = (seconds) => {
-    const hrs = Math.floor(seconds / 3600)
-      .toString()
-      .padStart(2, "0");
-    const mins = Math.floor((seconds % 3600) / 60)
-      .toString()
-      .padStart(2, "0");
-    const secs = (seconds % 60).toString().padStart(2, "0");
-    return `${hrs}:${mins}:${secs}`;
+    // Calculate stats
+    const totalTime = sessions.reduce((acc, session) => acc + (session.duration || 0), 0);
+    const totalSessions = sessions.length;
+    const avgSessionTime = totalSessions > 0 ? totalTime / totalSessions : 0;
+    const activeProjects = new Set(sessions.map(s => s.projectId)).size;
+
+    setStats({
+      totalTime,
+      totalSessions,
+      avgSessionTime,
+      activeProjects,
+    });
+  }, [store]);
+
+  const formatDuration = (ms) => {
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / 1000 / 60) % 60);
+    const hours = Math.floor(ms / 1000 / 60 / 60);
+    return `${hours}h ${minutes}m ${seconds}s`;
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <div className="flex gap-4">
-          <Link href="/">
-            <Button size="lg">Start New Session</Button>
-          </Link>
-        </div>
-      </div>
+    <div className="container mx-auto py-8 max-w-6xl">
+      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Active Timer Card */}
+      {/* Stats Grid */}
+      <div className="grid gap-6 mb-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardTitle>Current Session</CardTitle>
+            <CardTitle>Total Time</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-mono mb-4">{formatTime(time)}</div>
-            <div className="flex gap-2">
-              <Button className="w-full" onClick={() => setIsRunning(!isRunning)}>
-                {isRunning ? "Pause" : "Start"}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setTime(0);
-                  setIsRunning(false);
-                }}
-              >
-                Reset
-              </Button>
-            </div>
+            <p className="text-2xl font-mono">{formatDuration(stats.totalTime)}</p>
           </CardContent>
         </Card>
 
-        {/* Quick Notes Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Quick Notes</CardTitle>
+            <CardTitle>Total Sessions</CardTitle>
           </CardHeader>
           <CardContent>
-            <Textarea
-              placeholder="Write your thoughts, progress, or TODOs here..."
-              className="min-h-[120px]"
-            />
+            <p className="text-2xl">{stats.totalSessions}</p>
           </CardContent>
         </Card>
 
-        {/* Recent Activity Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle>Avg Session Time</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <div>
-                  <p className="text-sm font-medium">Completed Timer Session</p>
-                  <p className="text-xs text-gray-500">2 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-blue-500" />
-                <div>
-                  <p className="text-sm font-medium">Added Note</p>
-                  <p className="text-xs text-gray-500">3 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-purple-500" />
-                <div>
-                  <p className="text-sm font-medium">GitHub Commit</p>
-                  <p className="text-xs text-gray-500">5 hours ago</p>
-                </div>
-              </div>
-            </div>
+            <p className="text-2xl font-mono">{formatDuration(stats.avgSessionTime)}</p>
           </CardContent>
         </Card>
 
-        {/* Statistics Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Statistics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Total Time</dt>
-                <dd className="text-2xl font-semibold">24h 30m</dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Sessions</dt>
-                <dd className="text-2xl font-semibold">12</dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Commits</dt>
-                <dd className="text-2xl font-semibold">34</dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Notes</dt>
-                <dd className="text-2xl font-semibold">8</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-
-        {/* Projects Card */}
         <Card>
           <CardHeader>
             <CardTitle>Active Projects</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Zebra Frontend</p>
-                  <p className="text-sm text-gray-500">4 sessions this week</p>
-                </div>
-                <Button variant="ghost" size="sm">View</Button>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">API Integration</p>
-                  <p className="text-sm text-gray-500">2 sessions this week</p>
-                </div>
-                <Button variant="ghost" size="sm">View</Button>
-              </div>
-            </div>
+            <p className="text-2xl">{stats.activeProjects}</p>
           </CardContent>
         </Card>
+      </div>
 
-        {/* GitHub Activity Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>GitHub Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium">feat: Add timer functionality</p>
-                <p className="text-xs text-gray-500">2 hours ago</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">fix: Resolve UI bugs</p>
-                <p className="text-xs text-gray-500">5 hours ago</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">docs: Update README</p>
-                <p className="text-xs text-gray-500">1 day ago</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Time Heatmap */}
+      <Card className="mb-8">
+        <CardContent className="pt-6">
+          <TimeHeatmap 
+            sessions={store.projects.flatMap(project => 
+              store.getSessionsByProjectId(project.id)
+            )} 
+          />
+        </CardContent>
+      </Card>
+
+      {/* Recent Projects */}
+      <h2 className="text-2xl font-semibold mb-4">Recent Projects</h2>
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        {store.projects
+          .sort((a, b) => {
+            const aLastSession = Math.max(...(store.getSessionsByProjectId(a.id).map(s => s.startTime) || [0]));
+            const bLastSession = Math.max(...(store.getSessionsByProjectId(b.id).map(s => s.startTime) || [0]));
+            return bLastSession - aLastSession;
+          })
+          .slice(0, 6)
+          .map(project => {
+            const projectSessions = store.getSessionsByProjectId(project.id);
+            const totalTime = projectSessions.reduce((acc, session) => acc + (session.duration || 0), 0);
+            const lastActive = Math.max(...projectSessions.map(s => s.startTime));
+
+            return (
+              <Card key={project.id}>
+                <CardContent className="pt-6">
+                  <h3 className="text-lg font-semibold mb-2">
+                    <a href={`/projects/${project.id}`} className="hover:text-blue-600">
+                      {project.name}
+                    </a>
+                  </h3>
+                  <div className="space-y-1 text-sm text-gray-500">
+                    <p>Total Time: {formatDuration(totalTime)}</p>
+                    <p>Sessions: {projectSessions.length}</p>
+                    <p>Last Active: {format(lastActive, 'MMM d, yyyy')}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
       </div>
     </div>
   );
