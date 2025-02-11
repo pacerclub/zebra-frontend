@@ -1,18 +1,19 @@
+"use client"
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import ThemeToggle from "@/components/ui/theme-toggle";
 
 export default function Dashboard() {
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <ThemeToggle />
-        <Button size="lg">
-          Start New Session
-        </Button>
+        <div className="flex gap-4">
+          <ThemeToggle />
+          <Button size="lg">Start New Session</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -151,19 +152,5 @@ export default function Dashboard() {
         </Card>
       </div>
     </div>
-  );
-}
-
-function ThemeToggle() {
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-  }, [darkMode]);
-
-  return (
-    <Button variant="ghost" onClick={() => setDarkMode(!darkMode)}>
-      {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-    </Button>
   );
 }
