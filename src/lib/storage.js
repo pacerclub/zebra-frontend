@@ -67,6 +67,35 @@ class Storage {
     if (isLocalStorageAvailable()) {
       localStorage.setItem('storage_mode', mode);
     }
+
+    // If we have a token, update the server with the new storage mode
+    if (this.token) {
+      try {
+        const response = await fetch(`${API_URL}/api/auth/preferences`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({
+            storage_mode: mode,
+            is_onboarded: true,
+          }),
+        });
+
+        if (!response.ok) {
+          console.error('Failed to update storage mode on server');
+        }
+      } catch (error) {
+        console.error('Error updating storage mode:', error);
+      }
+    }
+
+    if (mode === STORAGE_MODE.CLOUD && this.token) {
+      this.startSync();
+    } else {
+      this.stopSync();
+    }
   }
 
   async login(email, password) {
@@ -99,8 +128,10 @@ class Storage {
       localStorage.setItem('user_email', email);
       localStorage.setItem('storage_mode', this.mode);
       localStorage.setItem('device_id', DEVICE_ID);
-      this.setStorageMode(this.mode);
     }
+
+    // Update storage mode and onboarded status
+    await this.setStorageMode(this.mode);
 
     return data;
   }
