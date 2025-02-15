@@ -70,33 +70,36 @@ class Storage {
   }
 
   async login(email, password) {
+    console.log('Attempting login with:', { email, device_id: DEVICE_ID });
     const response = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ 
+        email, 
+        password,
+        device_id: DEVICE_ID 
+      }),
     });
 
+    const data = await response.json();
+    console.log('Login response:', { status: response.status, data });
+
     if (!response.ok) {
-      let errorMessage = 'Failed to login';
-      try {
-        const error = await response.json();
-        errorMessage = error.message || errorMessage;
-      } catch {
-        errorMessage = response.statusText || errorMessage;
-      }
-      throw new Error(errorMessage);
+      throw new Error(data.error || 'Failed to login');
     }
 
-    const data = await response.json();
     this.token = data.token;
     this.email = email;
+    this.mode = data.storage_mode || STORAGE_MODE.CLOUD;
 
     if (isLocalStorageAvailable()) {
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('user_email', email);
-      this.setStorageMode(STORAGE_MODE.CLOUD);
+      localStorage.setItem('storage_mode', this.mode);
+      localStorage.setItem('device_id', DEVICE_ID);
+      this.setStorageMode(this.mode);
     }
 
     return data;
@@ -108,7 +111,11 @@ class Storage {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ 
+        email, 
+        password,
+        device_id: DEVICE_ID 
+      }),
     });
 
     if (!response.ok) {
