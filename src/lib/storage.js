@@ -117,16 +117,37 @@ class Storage {
   }
 
   logout() {
-    this.token = null;
-    this.email = null;
-    this.mode = STORAGE_MODE.LOCAL;
-    this.stopSync();
-
+    // Clear authentication data
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_email');
-    localStorage.setItem('storage_mode', STORAGE_MODE.LOCAL);
     localStorage.removeItem('last_sync_time');
+    
+    // Clear pending changes
+    this.pendingChanges = {
+      sessions: [],
+      projects: [],
+      deletedSessions: [],
+      deletedProjects: [],
+    };
     localStorage.removeItem('pending_changes');
+
+    // Reset instance variables
+    this.token = null;
+    this.email = null;
+    this.lastSyncTime = null;
+    this.mode = STORAGE_MODE.LOCAL;
+    localStorage.setItem('storage_mode', STORAGE_MODE.LOCAL);
+
+    // Stop sync process
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+
+    // Redirect to login page
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   }
 
   // Sync methods
