@@ -6,24 +6,50 @@ const STORAGE_MODE = {
   CLOUD: 'cloud',
 };
 
-const DEVICE_ID = typeof window !== 'undefined' ? localStorage.getItem('device_id') || uuidv4() : uuidv4();
-if (typeof window !== 'undefined') {
+function isLocalStorageAvailable() {
+  try {
+    return typeof window !== 'undefined' && 
+           window.localStorage !== undefined && 
+           window.localStorage !== null;
+  } catch (e) {
+    return false;
+  }
+}
+
+const DEVICE_ID = isLocalStorageAvailable() ? localStorage.getItem('device_id') || uuidv4() : uuidv4();
+if (isLocalStorageAvailable()) {
   localStorage.setItem('device_id', DEVICE_ID);
 }
 
 class Storage {
   constructor() {
-    this.token = localStorage.getItem('auth_token');
-    this.email = localStorage.getItem('user_email');
-    this.lastSyncTime = localStorage.getItem('last_sync_time');
-    this.mode = localStorage.getItem('storage_mode') || STORAGE_MODE.LOCAL;
-    this.pendingChanges = JSON.parse(localStorage.getItem('pending_changes')) || {
+    this.token = null;
+    this.email = null;
+    this.lastSyncTime = null;
+    this.mode = STORAGE_MODE.LOCAL;
+    this.pendingChanges = {
       sessions: [],
       projects: [],
       deletedSessions: [],
       deletedProjects: [],
     };
-    this.syncInterval = null;
+
+    // Only access localStorage in browser
+    if (isLocalStorageAvailable()) {
+      this.token = localStorage.getItem('auth_token');
+      this.email = localStorage.getItem('user_email');
+      this.lastSyncTime = localStorage.getItem('last_sync_time');
+      this.mode = localStorage.getItem('storage_mode') || STORAGE_MODE.LOCAL;
+      
+      const savedPendingChanges = localStorage.getItem('pending_changes');
+      if (savedPendingChanges) {
+        try {
+          this.pendingChanges = JSON.parse(savedPendingChanges);
+        } catch (e) {
+          console.error('Failed to parse pending changes');
+        }
+      }
+    }
 
     // Start sync if in cloud mode
     if (this.mode === STORAGE_MODE.CLOUD && this.token) {
@@ -35,8 +61,12 @@ class Storage {
     if (mode !== STORAGE_MODE.LOCAL && mode !== STORAGE_MODE.CLOUD) {
       throw new Error('Invalid storage mode');
     }
+
     this.mode = mode;
-    localStorage.setItem('storage_mode', mode);
+    
+    if (isLocalStorageAvailable()) {
+      localStorage.setItem('storage_mode', mode);
+    }
   }
 
   async login(email, password) {
@@ -62,9 +92,13 @@ class Storage {
     const data = await response.json();
     this.token = data.token;
     this.email = email;
-    localStorage.setItem('auth_token', data.token);
-    localStorage.setItem('user_email', email);
-    this.setStorageMode(STORAGE_MODE.CLOUD);
+
+    if (isLocalStorageAvailable()) {
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user_email', email);
+      this.setStorageMode(STORAGE_MODE.CLOUD);
+    }
+
     return data;
   }
 
@@ -91,32 +125,35 @@ class Storage {
     const data = await response.json();
     this.token = data.token;
     this.email = email;
-    localStorage.setItem('auth_token', data.token);
-    localStorage.setItem('user_email', email);
-    this.setStorageMode(STORAGE_MODE.CLOUD);
+
+    if (isLocalStorageAvailable()) {
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user_email', email);
+      this.setStorageMode(STORAGE_MODE.CLOUD);
+    }
+
     return data;
   }
 
   async logout() {
-    // Clear authentication data
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('last_sync_time');
-    
-    // Clear pending changes
+    if (isLocalStorageAvailable()) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_email');
+      localStorage.removeItem('last_sync_time');
+      localStorage.removeItem('pending_changes');
+      localStorage.setItem('storage_mode', STORAGE_MODE.LOCAL);
+    }
+
+    this.token = null;
+    this.email = null;
+    this.lastSyncTime = null;
+    this.mode = STORAGE_MODE.LOCAL;
     this.pendingChanges = {
       sessions: [],
       projects: [],
       deletedSessions: [],
       deletedProjects: [],
     };
-    localStorage.removeItem('pending_changes');
-
-    // Reset instance variables
-    this.token = null;
-    this.email = null;
-    this.lastSyncTime = null;
-    this.setStorageMode(STORAGE_MODE.LOCAL);
 
     // Stop sync process
     if (this.syncInterval) {
@@ -124,7 +161,6 @@ class Storage {
       this.syncInterval = null;
     }
 
-    // Return a resolved promise to maintain async consistency
     return Promise.resolve();
   }
 
@@ -175,13 +211,17 @@ class Storage {
       // Update local storage with server data
       if (data.server_sessions) {
         data.server_sessions.forEach(session => {
-          localStorage.setItem(`session_${session.id}`, JSON.stringify(session));
+          if (isLocalStorageAvailable()) {
+            localStorage.setItem(`session_${session.id}`, JSON.stringify(session));
+          }
         });
       }
 
       if (data.server_projects) {
         data.server_projects.forEach(project => {
-          localStorage.setItem(`project_${project.id}`, JSON.stringify(project));
+          if (isLocalStorageAvailable()) {
+            localStorage.setItem(`project_${project.id}`, JSON.stringify(project));
+          }
         });
       }
 
@@ -192,11 +232,15 @@ class Storage {
         deletedSessions: [],
         deletedProjects: [],
       };
-      localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+      }
 
       // Update last sync time
       this.lastSyncTime = data.last_sync_time;
-      localStorage.setItem('last_sync_time', this.lastSyncTime);
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem('last_sync_time', this.lastSyncTime);
+      }
     } catch (error) {
       console.error('Sync failed:', error);
       // Keep pending changes for next sync attempt
@@ -227,16 +271,22 @@ class Storage {
         }
 
         const savedSession = await response.json();
-        localStorage.setItem(`session_${savedSession.id}`, JSON.stringify(savedSession));
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem(`session_${savedSession.id}`, JSON.stringify(savedSession));
+        }
         return savedSession;
       } catch (error) {
         // Store in pending changes if save fails
         this.pendingChanges.sessions.push(sessionWithId);
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        }
         throw error;
       }
     } else {
-      localStorage.setItem(`session_${sessionWithId.id}`, JSON.stringify(sessionWithId));
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem(`session_${sessionWithId.id}`, JSON.stringify(sessionWithId));
+      }
       return sessionWithId;
     }
   }
@@ -256,7 +306,9 @@ class Storage {
 
         const sessions = await response.json();
         sessions.forEach(session => {
-          localStorage.setItem(`session_${session.id}`, JSON.stringify(session));
+          if (isLocalStorageAvailable()) {
+            localStorage.setItem(`session_${session.id}`, JSON.stringify(session));
+          }
         });
         return sessions;
       } catch (error) {
@@ -270,11 +322,13 @@ class Storage {
 
   getLocalSessions() {
     const sessions = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key.startsWith('session_')) {
-        const session = JSON.parse(localStorage.getItem(key));
-        sessions.push(session);
+    if (isLocalStorageAvailable()) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('session_')) {
+          const session = JSON.parse(localStorage.getItem(key));
+          sessions.push(session);
+        }
       }
     }
     return sessions;
@@ -304,16 +358,22 @@ class Storage {
         }
 
         const savedProject = await response.json();
-        localStorage.setItem(`project_${savedProject.id}`, JSON.stringify(savedProject));
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem(`project_${savedProject.id}`, JSON.stringify(savedProject));
+        }
         return savedProject;
       } catch (error) {
         // Store in pending changes if save fails
         this.pendingChanges.projects.push(projectWithId);
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        }
         throw error;
       }
     } else {
-      localStorage.setItem(`project_${projectWithId.id}`, JSON.stringify(projectWithId));
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem(`project_${projectWithId.id}`, JSON.stringify(projectWithId));
+      }
       return projectWithId;
     }
   }
@@ -333,7 +393,9 @@ class Storage {
 
         const projects = await response.json();
         projects.forEach(project => {
-          localStorage.setItem(`project_${project.id}`, JSON.stringify(project));
+          if (isLocalStorageAvailable()) {
+            localStorage.setItem(`project_${project.id}`, JSON.stringify(project));
+          }
         });
         return projects;
       } catch (error) {
@@ -347,11 +409,13 @@ class Storage {
 
   getLocalProjects() {
     const projects = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key.startsWith('project_')) {
-        const project = JSON.parse(localStorage.getItem(key));
-        projects.push(project);
+    if (isLocalStorageAvailable()) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('project_')) {
+          const project = JSON.parse(localStorage.getItem(key));
+          projects.push(project);
+        }
       }
     }
     return projects;
@@ -372,15 +436,21 @@ class Storage {
           throw new Error('Failed to delete session');
         }
 
-        localStorage.removeItem(`session_${sessionId}`);
+        if (isLocalStorageAvailable()) {
+          localStorage.removeItem(`session_${sessionId}`);
+        }
       } catch (error) {
         // Add to deleted sessions for sync
         this.pendingChanges.deletedSessions.push(sessionId);
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        }
         throw error;
       }
     } else {
-      localStorage.removeItem(`session_${sessionId}`);
+      if (isLocalStorageAvailable()) {
+        localStorage.removeItem(`session_${sessionId}`);
+      }
     }
   }
 
@@ -398,15 +468,21 @@ class Storage {
           throw new Error('Failed to delete project');
         }
 
-        localStorage.removeItem(`project_${projectId}`);
+        if (isLocalStorageAvailable()) {
+          localStorage.removeItem(`project_${projectId}`);
+        }
       } catch (error) {
         // Add to deleted projects for sync
         this.pendingChanges.deletedProjects.push(projectId);
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        }
         throw error;
       }
     } else {
-      localStorage.removeItem(`project_${projectId}`);
+      if (isLocalStorageAvailable()) {
+        localStorage.removeItem(`project_${projectId}`);
+      }
     }
   }
 }
