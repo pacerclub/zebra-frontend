@@ -121,7 +121,7 @@ class Storage {
 
     this.token = data.token;
     this.email = email;
-    this.mode = data.storage_mode || STORAGE_MODE.CLOUD;
+    this.mode = STORAGE_MODE.CLOUD;
 
     if (isLocalStorageAvailable()) {
       localStorage.setItem('auth_token', data.token);
@@ -219,114 +219,90 @@ class Storage {
   }
 
   async sync() {
-    if (this.mode !== STORAGE_MODE.CLOUD || !this.token) {
+    if (!this.token || this.mode !== STORAGE_MODE.CLOUD) {
       return;
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/sync`, {
-        method: 'POST',
+      // Sync pending changes first
+      if (this.pendingChanges.sessions.length > 0) {
+        const response = await fetch(`${API_URL}/api/sync`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({
+            device_id: DEVICE_ID,
+            sessions: this.pendingChanges.sessions,
+            projects: this.pendingChanges.projects,
+            deleted_sessions: this.pendingChanges.deletedSessions,
+            deleted_projects: this.pendingChanges.deletedProjects,
+          }),
+        });
+
+        if (!response.ok) {
+          console.error('Failed to sync changes');
+          return;
+        }
+
+        // Clear pending changes after successful sync
+        this.pendingChanges = {
+          sessions: [],
+          projects: [],
+          deletedSessions: [],
+          deletedProjects: [],
+        };
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        }
+      }
+
+      // Get latest changes from server
+      const response = await fetch(`${API_URL}/api/sync?device_id=${DEVICE_ID}`, {
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.token}`,
         },
-        body: JSON.stringify({
-          device_id: DEVICE_ID,
-          last_sync_time: this.lastSyncTime,
-          local_sessions: this.pendingChanges.sessions,
-          local_projects: this.pendingChanges.projects,
-          deleted_sessions: this.pendingChanges.deletedSessions,
-          deleted_projects: this.pendingChanges.deletedProjects,
-        }),
       });
 
       if (!response.ok) {
-        throw new Error('Sync failed');
+        console.error('Failed to get latest changes');
+        return;
       }
 
       const data = await response.json();
-
+      
       // Update local storage with server data
-      if (data.server_sessions) {
-        data.server_sessions.forEach(session => {
-          if (isLocalStorageAvailable()) {
-            localStorage.setItem(`session_${session.id}`, JSON.stringify(session));
-          }
-        });
-      }
-
-      if (data.server_projects) {
-        data.server_projects.forEach(project => {
-          if (isLocalStorageAvailable()) {
-            localStorage.setItem(`project_${project.id}`, JSON.stringify(project));
-          }
-        });
-      }
-
-      // Clear pending changes after successful sync
-      this.pendingChanges = {
-        sessions: [],
-        projects: [],
-        deletedSessions: [],
-        deletedProjects: [],
-      };
       if (isLocalStorageAvailable()) {
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
-      }
-
-      // Update last sync time
-      this.lastSyncTime = data.last_sync_time;
-      if (isLocalStorageAvailable()) {
-        localStorage.setItem('last_sync_time', this.lastSyncTime);
+        localStorage.setItem('sessions', JSON.stringify(data.sessions || []));
+        localStorage.setItem('projects', JSON.stringify(data.projects || []));
+        localStorage.setItem('last_sync_time', new Date().toISOString());
       }
     } catch (error) {
-      console.error('Sync failed:', error);
-      // Keep pending changes for next sync attempt
+      console.error('Error during sync:', error);
     }
   }
 
   // Session methods
   async saveSession(session) {
-    const sessionWithId = {
-      ...session,
-      id: session.id || uuidv4(),
-      device_id: DEVICE_ID,
-    };
-
+    // Add to pending changes
     if (this.mode === STORAGE_MODE.CLOUD) {
-      try {
-        const response = await fetch(`${API_URL}/api/sessions`, {
-          method: session.id ? 'PUT' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(sessionWithId),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to save session');
-        }
-
-        const savedSession = await response.json();
-        if (isLocalStorageAvailable()) {
-          localStorage.setItem(`session_${savedSession.id}`, JSON.stringify(savedSession));
-        }
-        return savedSession;
-      } catch (error) {
-        // Store in pending changes if save fails
-        this.pendingChanges.sessions.push(sessionWithId);
-        if (isLocalStorageAvailable()) {
-          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
-        }
-        throw error;
-      }
-    } else {
+      this.pendingChanges.sessions.push(session);
       if (isLocalStorageAvailable()) {
-        localStorage.setItem(`session_${sessionWithId.id}`, JSON.stringify(sessionWithId));
+        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
       }
-      return sessionWithId;
+      // Trigger immediate sync
+      await this.sync();
     }
+
+    // Save locally
+    const sessions = this.getLocalSessions();
+    sessions.push(session);
+    if (isLocalStorageAvailable()) {
+      localStorage.setItem('sessions', JSON.stringify(sessions));
+    }
+
+    return session;
   }
 
   async getSessions() {

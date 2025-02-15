@@ -1,14 +1,30 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import StorageGuide from '@/components/storage-guide';
+import { storage } from '@/lib/storage';
 
 export default function StorageSelectionPage() {
   const router = useRouter();
 
+  useEffect(() => {
+    // If user is logged in, automatically use cloud storage
+    if (storage.token) {
+      storage.setStorageMode('cloud').then(() => {
+        router.push('/');
+      });
+    }
+  }, [router]);
+
   const handleStorageComplete = () => {
     router.push('/');
   };
+
+  // If user is logged in, don't show the storage selection
+  if (storage.token) {
+    return null;
+  }
 
   return (
     <div className="container max-w-2xl mx-auto py-10 px-4">
