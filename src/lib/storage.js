@@ -57,7 +57,7 @@ class Storage {
     }
   }
 
-  setStorageMode(mode) {
+  async setStorageMode(mode) {
     if (mode !== STORAGE_MODE.LOCAL && mode !== STORAGE_MODE.CLOUD) {
       throw new Error('Invalid storage mode');
     }
@@ -92,9 +92,9 @@ class Storage {
     }
 
     if (mode === STORAGE_MODE.CLOUD && this.token) {
-      this.startSync();
+      await this.startSync();
     } else {
-      this.stopSync();
+      await this.stopSync();
     }
   }
 
