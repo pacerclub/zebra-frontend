@@ -2,12 +2,14 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { storage } from '@/lib/storage';
+import { useRouter } from 'next/navigation';
 
 const UserContext = createContext();
 
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     // Check if user is already logged in
@@ -47,8 +49,9 @@ export function UserProvider({ children }) {
 
   const logout = async () => {
     try {
-      storage.logout();
+      await storage.logout();
       setUser(null);
+      router.push('/auth/login');
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
@@ -61,6 +64,7 @@ export function UserProvider({ children }) {
     login,
     register,
     logout,
+    isAuthenticated: !!user,
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

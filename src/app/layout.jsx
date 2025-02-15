@@ -7,8 +7,41 @@ import "./globals.css";
 import ThemeToggle from "@/components/ui/theme-toggle";
 import SettingsDialog from "@/components/settings-dialog";
 import UserMenu from '@/components/user-menu';
+import { usePathname } from 'next/navigation';
 
 const inter = Inter({ subsets: ['latin'] });
+
+function Header() {
+  const pathname = usePathname();
+  const isAuthPage = pathname?.startsWith('/auth/');
+
+  if (isAuthPage) {
+    return null;
+  }
+
+  return (
+    <header className="border-b">
+      <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
+        <div className="flex items-center gap-4">
+          <a href="/" className="flex items-center gap-2">
+            <span className="text-2xl">🦓</span>
+            <span className="font-semibold text-xl">Zebra</span>
+          </a>
+          <div className="hidden md:flex items-center gap-6 ml-6">
+            <a href="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Dashboard</a>
+            <a href="/" className="text-sm font-medium transition-colors hover:text-primary">Timer</a>
+            <a href="/projects" className="text-sm font-medium transition-colors hover:text-primary">Projects</a>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <UserMenu />
+          <SettingsDialog />
+          <ThemeToggle />
+        </div>
+      </nav>
+    </header>
+  );
+}
 
 export default function RootLayout({ children }) {
   return (
@@ -16,26 +49,7 @@ export default function RootLayout({ children }) {
       <body className={inter.className + " antialiased min-h-full flex flex-col"}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <UserProvider>
-            <header className="border-b">
-              <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <a href="/" className="flex items-center gap-2">
-                    <span className="text-2xl">🦓</span>
-                    <span className="font-semibold text-xl">Zebra</span>
-                  </a>
-                  <div className="hidden md:flex items-center gap-6 ml-6">
-                    <a href="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Dashboard</a>
-                    <a href="/" className="text-sm font-medium transition-colors hover:text-primary">Timer</a>
-                    <a href="/projects" className="text-sm font-medium transition-colors hover:text-primary">Projects</a>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <UserMenu />
-                  <SettingsDialog />
-                  <ThemeToggle />
-                </div>
-              </nav>
-            </header>
+            <Header />
             <main className="flex-1">
               {children}
             </main>

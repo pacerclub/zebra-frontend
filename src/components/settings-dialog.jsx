@@ -13,7 +13,6 @@ import {
 import { Settings } from 'lucide-react';
 import StorageGuide from '@/components/storage-guide';
 import { useUser } from '@/contexts/user-context';
-import { storage } from '@/lib/storage';
 
 export default function SettingsDialog() {
   const [open, setOpen] = useState(false);
@@ -43,15 +42,15 @@ export default function SettingsDialog() {
           {user && (
             <div className="space-y-4">
               <div>
-                <h3 className="font-medium mb-2">Account</h3>
+                <h3 className="font-medium mb-1">Storage Mode</h3>
                 <p className="text-sm text-muted-foreground">
-                  Signed in as {user.email}
+                  Currently using cloud storage. Your data is synced across all your devices.
                 </p>
               </div>
               <div>
-                <h3 className="font-medium mb-2">Storage Mode</h3>
+                <h3 className="font-medium mb-1">Account</h3>
                 <p className="text-sm text-muted-foreground">
-                  Your data is synced across all your devices using cloud storage.
+                  Logged in as {user.email}
                 </p>
               </div>
             </div>

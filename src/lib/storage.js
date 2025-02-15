@@ -13,39 +13,32 @@ if (typeof window !== 'undefined') {
 
 class Storage {
   constructor() {
-    this.mode = STORAGE_MODE.LOCAL;
-    this.token = null;
-    this.email = null;
-    this.syncInterval = null;
-    this.lastSyncTime = null;
-    this.pendingChanges = {
+    this.token = localStorage.getItem('auth_token');
+    this.email = localStorage.getItem('user_email');
+    this.lastSyncTime = localStorage.getItem('last_sync_time');
+    this.mode = localStorage.getItem('storage_mode') || STORAGE_MODE.LOCAL;
+    this.pendingChanges = JSON.parse(localStorage.getItem('pending_changes')) || {
       sessions: [],
       projects: [],
       deletedSessions: [],
       deletedProjects: [],
     };
+    this.syncInterval = null;
 
-    // Load saved mode and token
-    if (typeof window !== 'undefined') {
-      this.mode = localStorage.getItem('storage_mode') || STORAGE_MODE.LOCAL;
-      this.token = localStorage.getItem('auth_token');
-      this.email = localStorage.getItem('user_email');
-      this.lastSyncTime = localStorage.getItem('last_sync_time');
-
-      // Load pending changes
-      const pendingChanges = localStorage.getItem('pending_changes');
-      if (pendingChanges) {
-        this.pendingChanges = JSON.parse(pendingChanges);
-      }
-
-      // Start sync if in cloud mode
-      if (this.mode === STORAGE_MODE.CLOUD && this.token) {
-        this.startSync();
-      }
+    // Start sync if in cloud mode
+    if (this.mode === STORAGE_MODE.CLOUD && this.token) {
+      this.startSync();
     }
   }
 
-  // Authentication methods
+  setStorageMode(mode) {
+    if (mode !== STORAGE_MODE.LOCAL && mode !== STORAGE_MODE.CLOUD) {
+      throw new Error('Invalid storage mode');
+    }
+    this.mode = mode;
+    localStorage.setItem('storage_mode', mode);
+  }
+
   async login(email, password) {
     const response = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
@@ -56,28 +49,22 @@ class Storage {
     });
 
     if (!response.ok) {
-      let errorMessage = 'Login failed. Please check your credentials.';
+      let errorMessage = 'Failed to login';
       try {
-        const errorData = await response.json();
-        if (errorData && errorData.error) {
-          errorMessage = errorData.error;
-        }
-      } catch (e) {
-        // If response is not JSON, use status text
+        const error = await response.json();
+        errorMessage = error.message || errorMessage;
+      } catch {
         errorMessage = response.statusText || errorMessage;
       }
       throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    if (!data || !data.token) {
-      throw new Error('Invalid response from server');
-    }
-
+    this.token = data.token;
+    this.email = email;
     localStorage.setItem('auth_token', data.token);
     localStorage.setItem('user_email', email);
-    this.token = data.token;
-    this.mode = STORAGE_MODE.CLOUD;
+    this.setStorageMode(STORAGE_MODE.CLOUD);
     return data;
   }
 
@@ -91,32 +78,26 @@ class Storage {
     });
 
     if (!response.ok) {
-      let errorMessage = 'Registration failed. Please try again.';
+      let errorMessage = 'Failed to register';
       try {
-        const errorData = await response.json();
-        if (errorData && errorData.error) {
-          errorMessage = errorData.error;
-        }
-      } catch (e) {
-        // If response is not JSON, use status text
+        const error = await response.json();
+        errorMessage = error.message || errorMessage;
+      } catch {
         errorMessage = response.statusText || errorMessage;
       }
       throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    if (!data || !data.token) {
-      throw new Error('Invalid response from server');
-    }
-
+    this.token = data.token;
+    this.email = email;
     localStorage.setItem('auth_token', data.token);
     localStorage.setItem('user_email', email);
-    this.token = data.token;
-    this.mode = STORAGE_MODE.CLOUD;
+    this.setStorageMode(STORAGE_MODE.CLOUD);
     return data;
   }
 
-  logout() {
+  async logout() {
     // Clear authentication data
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_email');
@@ -135,8 +116,7 @@ class Storage {
     this.token = null;
     this.email = null;
     this.lastSyncTime = null;
-    this.mode = STORAGE_MODE.LOCAL;
-    localStorage.setItem('storage_mode', STORAGE_MODE.LOCAL);
+    this.setStorageMode(STORAGE_MODE.LOCAL);
 
     // Stop sync process
     if (this.syncInterval) {
@@ -144,10 +124,8 @@ class Storage {
       this.syncInterval = null;
     }
 
-    // Redirect to login page
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
+    // Return a resolved promise to maintain async consistency
+    return Promise.resolve();
   }
 
   // Sync methods
@@ -434,3 +412,4 @@ class Storage {
 }
 
 export const storage = new Storage();
+export { STORAGE_MODE };
