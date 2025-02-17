@@ -130,8 +130,8 @@ class Storage {
       localStorage.setItem('device_id', DEVICE_ID);
     }
 
-    // Update storage mode and onboarded status
-    await this.setStorageMode(this.mode);
+    // Start sync immediately after login
+    await this.startSync();
 
     return data;
   }
@@ -203,12 +203,31 @@ class Storage {
   }
 
   // Sync methods
-  startSync() {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
+  async startSync() {
+    if (!this.token || this.mode !== STORAGE_MODE.CLOUD) {
+      console.log('Cannot start sync: no token or not in cloud mode');
+      return;
     }
-    this.syncInterval = setInterval(() => this.sync(), 30000); // Sync every 30 seconds
-    this.sync(); // Initial sync
+
+    console.log('Starting sync...');
+    
+    // First do an immediate sync
+    try {
+      await this.sync();
+    } catch (error) {
+      console.error('Initial sync failed:', error);
+    }
+
+    // Then set up periodic sync
+    if (!this.syncInterval) {
+      this.syncInterval = setInterval(async () => {
+        try {
+          await this.sync();
+        } catch (error) {
+          console.error('Periodic sync failed:', error);
+        }
+      }, 30000); // Sync every 30 seconds
+    }
   }
 
   stopSync() {
@@ -220,13 +239,35 @@ class Storage {
 
   async sync() {
     if (!this.token || this.mode !== STORAGE_MODE.CLOUD) {
+      console.log('Skipping sync: no token or not in cloud mode');
       return;
     }
 
+    console.log('Syncing with server...');
+
     try {
-      // Sync pending changes first
-      if (this.pendingChanges.sessions.length > 0) {
-        const response = await fetch(`${API_URL}/api/sync`, {
+      // First, get server data
+      const response = await fetch(`${API_URL}/api/sync?device_id=${DEVICE_ID}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch server data');
+      }
+
+      const serverData = await response.json();
+      console.log('Received server data:', serverData);
+
+      // Then send local changes
+      if (this.pendingChanges.sessions.length > 0 || 
+          this.pendingChanges.projects.length > 0 ||
+          this.pendingChanges.deletedSessions.length > 0 ||
+          this.pendingChanges.deletedProjects.length > 0) {
+        
+        const syncResponse = await fetch(`${API_URL}/api/sync`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -234,6 +275,7 @@ class Storage {
           },
           body: JSON.stringify({
             device_id: DEVICE_ID,
+            last_sync_time: this.lastSyncTime || new Date(0).toISOString(),
             sessions: this.pendingChanges.sessions,
             projects: this.pendingChanges.projects,
             deleted_sessions: this.pendingChanges.deletedSessions,
@@ -241,9 +283,8 @@ class Storage {
           }),
         });
 
-        if (!response.ok) {
-          console.error('Failed to sync changes');
-          return;
+        if (!syncResponse.ok) {
+          throw new Error('Failed to sync local changes');
         }
 
         // Clear pending changes after successful sync
@@ -253,33 +294,22 @@ class Storage {
           deletedSessions: [],
           deletedProjects: [],
         };
+
         if (isLocalStorageAvailable()) {
           localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
         }
       }
 
-      // Get latest changes from server
-      const response = await fetch(`${API_URL}/api/sync?device_id=${DEVICE_ID}`, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Failed to get latest changes');
-        return;
-      }
-
-      const data = await response.json();
-      
-      // Update local storage with server data
+      // Update last sync time
+      this.lastSyncTime = new Date().toISOString();
       if (isLocalStorageAvailable()) {
-        localStorage.setItem('sessions', JSON.stringify(data.sessions || []));
-        localStorage.setItem('projects', JSON.stringify(data.projects || []));
-        localStorage.setItem('last_sync_time', new Date().toISOString());
+        localStorage.setItem('last_sync_time', this.lastSyncTime);
       }
+
+      console.log('Sync completed successfully');
     } catch (error) {
-      console.error('Error during sync:', error);
+      console.error('Sync failed:', error);
+      throw error;
     }
   }
 

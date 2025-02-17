@@ -9,20 +9,22 @@ export default function StorageSelectionPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // If user is logged in, automatically use cloud storage
+    // If user is logged in, automatically use cloud storage and redirect
     if (storage.token) {
-      storage.setStorageMode('cloud').then(() => {
-        router.push('/');
-      });
+      storage.setStorageMode('cloud')
+        .then(() => router.push('/'))
+        .catch(console.error);
+      return;
+    }
+
+    // If storage mode is already set, redirect to home
+    if (storage.mode) {
+      router.push('/');
     }
   }, [router]);
 
-  const handleStorageComplete = () => {
-    router.push('/');
-  };
-
-  // If user is logged in, don't show the storage selection
-  if (storage.token) {
+  // If user is logged in or storage mode is set, don't render anything
+  if (storage.token || storage.mode) {
     return null;
   }
 
@@ -34,7 +36,7 @@ export default function StorageSelectionPage() {
           Select how you want to store your timer data. You can change this later in settings.
         </p>
       </div>
-      <StorageGuide onComplete={handleStorageComplete} />
+      <StorageGuide onComplete={() => router.push('/')} />
     </div>
   );
 }
