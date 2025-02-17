@@ -62,10 +62,19 @@ class Storage {
       throw new Error('Invalid storage mode');
     }
 
+    // If we're already in this mode, don't do anything
+    if (this.mode === mode) {
+      return;
+    }
+
     this.mode = mode;
     
     if (isLocalStorageAvailable()) {
-      localStorage.setItem('storage_mode', mode);
+      try {
+        localStorage.setItem('storage_mode', mode);
+      } catch (error) {
+        console.error('Failed to save storage mode to localStorage:', error);
+      }
     }
 
     // If we have a token, update the server with the new storage mode
@@ -84,10 +93,11 @@ class Storage {
         });
 
         if (!response.ok) {
-          console.error('Failed to update storage mode on server');
+          throw new Error('Failed to update storage mode on server');
         }
       } catch (error) {
         console.error('Error updating storage mode:', error);
+        // Even if server update fails, keep the local mode as is
       }
     }
 
@@ -95,6 +105,24 @@ class Storage {
       await this.startSync();
     } else {
       await this.stopSync();
+    }
+  }
+
+  savePendingChanges() {
+    if (!isLocalStorageAvailable()) return;
+
+    try {
+      localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+    } catch (error) {
+      console.error('Failed to save pending changes:', error);
+      // If we hit quota, clear old data
+      try {
+        localStorage.removeItem('sessions');
+        localStorage.removeItem('projects');
+        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+      } catch (e) {
+        console.error('Failed to save even after clearing:', e);
+      }
     }
   }
 
@@ -202,7 +230,6 @@ class Storage {
     return Promise.resolve();
   }
 
-  // Sync methods
   async startSync() {
     if (!this.token || this.mode !== STORAGE_MODE.CLOUD) {
       console.log('Cannot start sync: no token or not in cloud mode');
@@ -313,26 +340,27 @@ class Storage {
     }
   }
 
-  // Session methods
   async saveSession(session) {
-    // Add to pending changes
-    if (this.mode === STORAGE_MODE.CLOUD) {
+    if (this.mode === STORAGE_MODE.CLOUD && this.token) {
       this.pendingChanges.sessions.push(session);
-      if (isLocalStorageAvailable()) {
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
-      }
-      // Trigger immediate sync
+      this.savePendingChanges();
       await this.sync();
+    } else {
+      const sessions = this.getLocalSessions();
+      sessions.push(session);
+      try {
+        localStorage.setItem('sessions', JSON.stringify(sessions));
+      } catch (error) {
+        console.error('Failed to save session:', error);
+        // If we hit quota, try to clear some space
+        try {
+          const oldSessions = sessions.slice(-50); // Keep only last 50 sessions
+          localStorage.setItem('sessions', JSON.stringify(oldSessions));
+        } catch (e) {
+          console.error('Failed to save even after clearing:', e);
+        }
+      }
     }
-
-    // Save locally
-    const sessions = this.getLocalSessions();
-    sessions.push(session);
-    if (isLocalStorageAvailable()) {
-      localStorage.setItem('sessions', JSON.stringify(sessions));
-    }
-
-    return session;
   }
 
   async getSessions() {
@@ -378,7 +406,6 @@ class Storage {
     return sessions;
   }
 
-  // Project methods
   async saveProject(project) {
     const projectWithId = {
       ...project,
@@ -386,39 +413,25 @@ class Storage {
       device_id: DEVICE_ID,
     };
 
-    if (this.mode === STORAGE_MODE.CLOUD) {
-      try {
-        const response = await fetch(`${API_URL}/api/projects`, {
-          method: project.id ? 'PUT' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(projectWithId),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to save project');
-        }
-
-        const savedProject = await response.json();
-        if (isLocalStorageAvailable()) {
-          localStorage.setItem(`project_${savedProject.id}`, JSON.stringify(savedProject));
-        }
-        return savedProject;
-      } catch (error) {
-        // Store in pending changes if save fails
-        this.pendingChanges.projects.push(projectWithId);
-        if (isLocalStorageAvailable()) {
-          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
-        }
-        throw error;
-      }
+    if (this.mode === STORAGE_MODE.CLOUD && this.token) {
+      this.pendingChanges.projects.push(project);
+      this.savePendingChanges();
+      await this.sync();
     } else {
-      if (isLocalStorageAvailable()) {
-        localStorage.setItem(`project_${projectWithId.id}`, JSON.stringify(projectWithId));
+      const projects = this.getLocalProjects();
+      projects.push(projectWithId);
+      try {
+        localStorage.setItem('projects', JSON.stringify(projects));
+      } catch (error) {
+        console.error('Failed to save project:', error);
+        // If we hit quota, try to clear some space
+        try {
+          const oldProjects = projects.slice(-20); // Keep only last 20 projects
+          localStorage.setItem('projects', JSON.stringify(oldProjects));
+        } catch (e) {
+          console.error('Failed to save even after clearing:', e);
+        }
       }
-      return projectWithId;
     }
   }
 
@@ -465,7 +478,6 @@ class Storage {
     return projects;
   }
 
-  // Delete methods with sync support
   async deleteSession(sessionId) {
     if (this.mode === STORAGE_MODE.CLOUD) {
       try {
