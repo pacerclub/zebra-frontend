@@ -194,7 +194,7 @@ class Storage {
         },
         body: JSON.stringify({
           device_id: DEVICE_ID,
-          last_sync_time: this.lastSyncTime,
+          last_sync_time: this.lastSyncTime || new Date(0).toISOString(), // Default to epoch if no last sync
           local_sessions: this.pendingChanges.sessions,
           local_projects: this.pendingChanges.projects,
           deleted_sessions: this.pendingChanges.deletedSessions,
@@ -203,10 +203,17 @@ class Storage {
       });
 
       if (!response.ok) {
-        throw new Error('Sync failed');
+        const errorText = await response.text();
+        throw new Error(`Sync failed: ${errorText}`);
       }
 
       const data = await response.json();
+
+      // Update last sync time
+      this.lastSyncTime = data.last_sync_time;
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem('last_sync_time', this.lastSyncTime);
+      }
 
       // Update local storage with server data
       if (data.server_sessions) {
@@ -236,14 +243,10 @@ class Storage {
         localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
       }
 
-      // Update last sync time
-      this.lastSyncTime = data.last_sync_time;
-      if (isLocalStorageAvailable()) {
-        localStorage.setItem('last_sync_time', this.lastSyncTime);
-      }
+      return data;
     } catch (error) {
       console.error('Sync failed:', error);
-      // Keep pending changes for next sync attempt
+      throw error;
     }
   }
 
