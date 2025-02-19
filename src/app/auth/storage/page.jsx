@@ -1,32 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import StorageGuide from '@/components/storage-guide';
-import { storage } from '@/lib/storage';
 
 export default function StorageSelectionPage() {
   const router = useRouter();
 
-  useEffect(() => {
-    // If user is logged in, automatically use cloud storage and redirect
-    if (storage.token) {
-      storage.setStorageMode('cloud')
-        .then(() => router.push('/'))
-        .catch(console.error);
-      return;
-    }
-
-    // If storage mode is already set, redirect to home
-    if (storage.mode) {
-      router.push('/');
-    }
-  }, [router]);
-
-  // If user is logged in or storage mode is set, don't render anything
-  if (storage.token || storage.mode) {
-    return null;
-  }
+  const handleStorageComplete = () => {
+    router.push('/');
+  };
 
   return (
     <div className="container max-w-2xl mx-auto py-10 px-4">
@@ -36,7 +18,7 @@ export default function StorageSelectionPage() {
           Select how you want to store your timer data. You can change this later in settings.
         </p>
       </div>
-      <StorageGuide onComplete={() => router.push('/')} />
+      <StorageGuide onComplete={handleStorageComplete} />
     </div>
   );
 }

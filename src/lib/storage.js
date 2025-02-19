@@ -57,109 +57,47 @@ class Storage {
     }
   }
 
-  async setStorageMode(mode) {
+  setStorageMode(mode) {
     if (mode !== STORAGE_MODE.LOCAL && mode !== STORAGE_MODE.CLOUD) {
       throw new Error('Invalid storage mode');
-    }
-
-    // If we're already in this mode, don't do anything
-    if (this.mode === mode) {
-      return;
     }
 
     this.mode = mode;
     
     if (isLocalStorageAvailable()) {
-      try {
-        localStorage.setItem('storage_mode', mode);
-      } catch (error) {
-        console.error('Failed to save storage mode to localStorage:', error);
-      }
-    }
-
-    // If we have a token, update the server with the new storage mode
-    if (this.token) {
-      try {
-        const response = await fetch(`${API_URL}/api/auth/preferences`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`,
-          },
-          body: JSON.stringify({
-            storage_mode: mode,
-            is_onboarded: true,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update storage mode on server');
-        }
-      } catch (error) {
-        console.error('Error updating storage mode:', error);
-        // Even if server update fails, keep the local mode as is
-      }
-    }
-
-    if (mode === STORAGE_MODE.CLOUD && this.token) {
-      await this.startSync();
-    } else {
-      await this.stopSync();
-    }
-  }
-
-  savePendingChanges() {
-    if (!isLocalStorageAvailable()) return;
-
-    try {
-      localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
-    } catch (error) {
-      console.error('Failed to save pending changes:', error);
-      // If we hit quota, clear old data
-      try {
-        localStorage.removeItem('sessions');
-        localStorage.removeItem('projects');
-        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
-      } catch (e) {
-        console.error('Failed to save even after clearing:', e);
-      }
+      localStorage.setItem('storage_mode', mode);
     }
   }
 
   async login(email, password) {
-    console.log('Attempting login with:', { email, device_id: DEVICE_ID });
     const response = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        email, 
-        password,
-        device_id: DEVICE_ID 
-      }),
+      body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
-    console.log('Login response:', { status: response.status, data });
-
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to login');
+      let errorMessage = 'Failed to login';
+      try {
+        const error = await response.json();
+        errorMessage = error.message || errorMessage;
+      } catch {
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
+    const data = await response.json();
     this.token = data.token;
     this.email = email;
-    this.mode = STORAGE_MODE.CLOUD;
 
     if (isLocalStorageAvailable()) {
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('user_email', email);
-      localStorage.setItem('storage_mode', this.mode);
-      localStorage.setItem('device_id', DEVICE_ID);
+      this.setStorageMode(STORAGE_MODE.CLOUD);
     }
-
-    // Start sync immediately after login
-    await this.startSync();
 
     return data;
   }
@@ -170,11 +108,7 @@ class Storage {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        email, 
-        password,
-        device_id: DEVICE_ID 
-      }),
+      body: JSON.stringify({ email, password }),
     });
 
     if (!response.ok) {
@@ -230,31 +164,13 @@ class Storage {
     return Promise.resolve();
   }
 
-  async startSync() {
-    if (!this.token || this.mode !== STORAGE_MODE.CLOUD) {
-      console.log('Cannot start sync: no token or not in cloud mode');
-      return;
+  // Sync methods
+  startSync() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
     }
-
-    console.log('Starting sync...');
-    
-    // First do an immediate sync
-    try {
-      await this.sync();
-    } catch (error) {
-      console.error('Initial sync failed:', error);
-    }
-
-    // Then set up periodic sync
-    if (!this.syncInterval) {
-      this.syncInterval = setInterval(async () => {
-        try {
-          await this.sync();
-        } catch (error) {
-          console.error('Periodic sync failed:', error);
-        }
-      }, 30000); // Sync every 30 seconds
-    }
+    this.syncInterval = setInterval(() => this.sync(), 30000); // Sync every 30 seconds
+    this.sync(); // Initial sync
   }
 
   stopSync() {
@@ -265,101 +181,113 @@ class Storage {
   }
 
   async sync() {
-    if (!this.token || this.mode !== STORAGE_MODE.CLOUD) {
-      console.log('Skipping sync: no token or not in cloud mode');
+    if (this.mode !== STORAGE_MODE.CLOUD || !this.token) {
       return;
     }
 
-    console.log('Syncing with server...');
-
     try {
-      // First, get server data
-      const response = await fetch(`${API_URL}/api/sync?device_id=${DEVICE_ID}`, {
-        method: 'GET',
+      const response = await fetch(`${API_URL}/api/auth/sync`, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.token}`,
         },
+        body: JSON.stringify({
+          device_id: DEVICE_ID,
+          last_sync_time: this.lastSyncTime,
+          local_sessions: this.pendingChanges.sessions,
+          local_projects: this.pendingChanges.projects,
+          deleted_sessions: this.pendingChanges.deletedSessions,
+          deleted_projects: this.pendingChanges.deletedProjects,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch server data');
+        throw new Error('Sync failed');
       }
 
-      const serverData = await response.json();
-      console.log('Received server data:', serverData);
+      const data = await response.json();
 
-      // Then send local changes
-      if (this.pendingChanges.sessions.length > 0 || 
-          this.pendingChanges.projects.length > 0 ||
-          this.pendingChanges.deletedSessions.length > 0 ||
-          this.pendingChanges.deletedProjects.length > 0) {
-        
-        const syncResponse = await fetch(`${API_URL}/api/sync`, {
-          method: 'POST',
+      // Update local storage with server data
+      if (data.server_sessions) {
+        data.server_sessions.forEach(session => {
+          if (isLocalStorageAvailable()) {
+            localStorage.setItem(`session_${session.id}`, JSON.stringify(session));
+          }
+        });
+      }
+
+      if (data.server_projects) {
+        data.server_projects.forEach(project => {
+          if (isLocalStorageAvailable()) {
+            localStorage.setItem(`project_${project.id}`, JSON.stringify(project));
+          }
+        });
+      }
+
+      // Clear pending changes after successful sync
+      this.pendingChanges = {
+        sessions: [],
+        projects: [],
+        deletedSessions: [],
+        deletedProjects: [],
+      };
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+      }
+
+      // Update last sync time
+      this.lastSyncTime = data.last_sync_time;
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem('last_sync_time', this.lastSyncTime);
+      }
+    } catch (error) {
+      console.error('Sync failed:', error);
+      // Keep pending changes for next sync attempt
+    }
+  }
+
+  // Session methods
+  async saveSession(session) {
+    const sessionWithId = {
+      ...session,
+      id: session.id || uuidv4(),
+      device_id: DEVICE_ID,
+    };
+
+    if (this.mode === STORAGE_MODE.CLOUD) {
+      try {
+        const response = await fetch(`${API_URL}/api/sessions`, {
+          method: session.id ? 'PUT' : 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.token}`,
           },
-          body: JSON.stringify({
-            device_id: DEVICE_ID,
-            last_sync_time: this.lastSyncTime || new Date(0).toISOString(),
-            sessions: this.pendingChanges.sessions,
-            projects: this.pendingChanges.projects,
-            deleted_sessions: this.pendingChanges.deletedSessions,
-            deleted_projects: this.pendingChanges.deletedProjects,
-          }),
+          body: JSON.stringify(sessionWithId),
         });
 
-        if (!syncResponse.ok) {
-          throw new Error('Failed to sync local changes');
+        if (!response.ok) {
+          throw new Error('Failed to save session');
         }
 
-        // Clear pending changes after successful sync
-        this.pendingChanges = {
-          sessions: [],
-          projects: [],
-          deletedSessions: [],
-          deletedProjects: [],
-        };
-
+        const savedSession = await response.json();
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem(`session_${savedSession.id}`, JSON.stringify(savedSession));
+        }
+        return savedSession;
+      } catch (error) {
+        // Store in pending changes if save fails
+        this.pendingChanges.sessions.push(sessionWithId);
         if (isLocalStorageAvailable()) {
           localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
         }
+        throw error;
       }
-
-      // Update last sync time
-      this.lastSyncTime = new Date().toISOString();
-      if (isLocalStorageAvailable()) {
-        localStorage.setItem('last_sync_time', this.lastSyncTime);
-      }
-
-      console.log('Sync completed successfully');
-    } catch (error) {
-      console.error('Sync failed:', error);
-      throw error;
-    }
-  }
-
-  async saveSession(session) {
-    if (this.mode === STORAGE_MODE.CLOUD && this.token) {
-      this.pendingChanges.sessions.push(session);
-      this.savePendingChanges();
-      await this.sync();
     } else {
-      const sessions = this.getLocalSessions();
-      sessions.push(session);
-      try {
-        localStorage.setItem('sessions', JSON.stringify(sessions));
-      } catch (error) {
-        console.error('Failed to save session:', error);
-        // If we hit quota, try to clear some space
-        try {
-          const oldSessions = sessions.slice(-50); // Keep only last 50 sessions
-          localStorage.setItem('sessions', JSON.stringify(oldSessions));
-        } catch (e) {
-          console.error('Failed to save even after clearing:', e);
-        }
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem(`session_${sessionWithId.id}`, JSON.stringify(sessionWithId));
       }
+      return sessionWithId;
     }
   }
 
@@ -406,6 +334,7 @@ class Storage {
     return sessions;
   }
 
+  // Project methods
   async saveProject(project) {
     const projectWithId = {
       ...project,
@@ -413,25 +342,39 @@ class Storage {
       device_id: DEVICE_ID,
     };
 
-    if (this.mode === STORAGE_MODE.CLOUD && this.token) {
-      this.pendingChanges.projects.push(project);
-      this.savePendingChanges();
-      await this.sync();
-    } else {
-      const projects = this.getLocalProjects();
-      projects.push(projectWithId);
+    if (this.mode === STORAGE_MODE.CLOUD) {
       try {
-        localStorage.setItem('projects', JSON.stringify(projects));
-      } catch (error) {
-        console.error('Failed to save project:', error);
-        // If we hit quota, try to clear some space
-        try {
-          const oldProjects = projects.slice(-20); // Keep only last 20 projects
-          localStorage.setItem('projects', JSON.stringify(oldProjects));
-        } catch (e) {
-          console.error('Failed to save even after clearing:', e);
+        const response = await fetch(`${API_URL}/api/projects`, {
+          method: project.id ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(projectWithId),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save project');
         }
+
+        const savedProject = await response.json();
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem(`project_${savedProject.id}`, JSON.stringify(savedProject));
+        }
+        return savedProject;
+      } catch (error) {
+        // Store in pending changes if save fails
+        this.pendingChanges.projects.push(projectWithId);
+        if (isLocalStorageAvailable()) {
+          localStorage.setItem('pending_changes', JSON.stringify(this.pendingChanges));
+        }
+        throw error;
       }
+    } else {
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem(`project_${projectWithId.id}`, JSON.stringify(projectWithId));
+      }
+      return projectWithId;
     }
   }
 
@@ -478,6 +421,7 @@ class Storage {
     return projects;
   }
 
+  // Delete methods with sync support
   async deleteSession(sessionId) {
     if (this.mode === STORAGE_MODE.CLOUD) {
       try {

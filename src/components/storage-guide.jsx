@@ -3,23 +3,18 @@
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { storage, STORAGE_MODE } from '@/lib/storage';
+import { storage } from '@/lib/storage';
 
 export default function StorageGuide({ onComplete }) {
   const router = useRouter();
 
-  const handleLocalStorage = async () => {
-    await storage.setStorageMode(STORAGE_MODE.LOCAL);
+  const handleLocalStorage = () => {
+    storage.setMode('local');
     onComplete?.();
   };
 
-  const handleCloudStorage = async () => {
-    if (storage.token) {
-      await storage.setStorageMode(STORAGE_MODE.CLOUD);
-      onComplete?.();
-    } else {
-      router.push('/auth/login');
-    }
+  const handleCloudStorage = () => {
+    router.push('/auth/login');
   };
 
   return (
@@ -53,7 +48,7 @@ export default function StorageGuide({ onComplete }) {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Your timer data will be synced to the cloud, allowing you to access it from any device. 
-            {!storage.token && " Requires an account."}
+            Requires an account.
           </p>
         </CardContent>
         <CardFooter>
