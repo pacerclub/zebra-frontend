@@ -246,12 +246,12 @@ export default function RecordInput() {
           <div className="border rounded-lg p-4 space-y-2">
             <h3 className="font-medium mb-2">Attachments</h3>
             {files.map((file) => (
-              <div key={file.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+              <div key={file.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded">
                 <div className="flex items-center gap-2 flex-1">
                   {getFileIcon(file)}
                   <div>
-                    <p className="text-sm font-medium truncate">{file.file.name}</p>
-                    <p className="text-xs text-gray-500">{formatFileSize(file.file.size)}</p>
+                    <p className="text-sm font-medium truncate dark:text-gray-200">{file.file.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatFileSize(file.file.size)}</p>
                   </div>
                 </div>
                 {file.previewUrl && (

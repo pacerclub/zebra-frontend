@@ -191,11 +191,11 @@ export default function ProjectPage() {
                               {record.files.map((file, fileIndex) => (
                                 <div
                                   key={fileIndex}
-                                  className="group relative flex flex-col gap-2 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow duration-200"
+                                  className="group relative flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow duration-200"
                                 >
                                   {file.type.startsWith('image/') ? (
                                     <div 
-                                      className="relative aspect-[4/3] cursor-pointer overflow-hidden bg-gray-50"
+                                      className="relative aspect-[4/3] cursor-pointer overflow-hidden bg-gray-50 dark:bg-gray-700"
                                       onClick={() => setSelectedImage(file)}
                                     >
                                       <img 
@@ -212,21 +212,21 @@ export default function ProjectPage() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="aspect-[4/3] flex items-center justify-center bg-gray-50 p-4">
+                                    <div className="aspect-[4/3] flex items-center justify-center bg-gray-50 dark:bg-gray-700 p-4">
                                       {file.type.startsWith('audio/') ? (
-                                        <FileAudio className="h-12 w-12 text-gray-400" />
+                                        <FileAudio className="h-12 w-12 text-gray-400 dark:text-gray-300" />
                                       ) : (
-                                        <FileIcon className="h-12 w-12 text-gray-400" />
+                                        <FileIcon className="h-12 w-12 text-gray-400 dark:text-gray-300" />
                                       )}
                                     </div>
                                   )}
                                   
                                   <div className="p-3 flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-medium text-sm text-gray-900 truncate">
+                                      <p className="font-medium text-sm text-gray-900 dark:text-gray-200 truncate">
                                         {file.name}
                                       </p>
-                                      <p className="text-xs text-gray-500 mt-0.5">
+                                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                         {formatFileSize(file.size)}
                                       </p>
                                     </div>
@@ -234,7 +234,7 @@ export default function ProjectPage() {
                                       variant="ghost"
                                       size="icon"
                                       onClick={() => handleDownload(file)}
-                                      className="shrink-0 text-gray-500 hover:text-gray-900"
+                                      className="shrink-0 text-gray-500 dark:text-gray-300 hover:text-gray-900"
                                     >
                                       <Download className="h-4 w-4" />
                                     </Button>
@@ -268,7 +268,7 @@ export default function ProjectPage() {
                           </div>
                         )}
 
-                        <div className="text-xs text-gray-400 mt-1">
+                        <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                           {new Date(record.timestamp).toLocaleTimeString()}
                         </div>
                       </div>
