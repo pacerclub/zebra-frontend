@@ -3,7 +3,8 @@ import useStore from '@/lib/store';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Input } from './ui/input';
-import { X, Play, Pause, FileIcon, Image as ImageIcon, FileAudio } from 'lucide-react';
+import { X, Play, Pause, FileIcon, Image as ImageIcon, FileAudio, Timer } from 'lucide-react';
+import { useTimer } from '@/hooks/useTimer';
 
 export default function RecordInput() {
   const [text, setText] = useState('');
@@ -17,6 +18,7 @@ export default function RecordInput() {
   const audioRef = useRef(null);
   const addRecord = useStore(state => state.addRecord);
   const isRunning = useStore(state => state.isRunning);
+  const { formattedTime } = useTimer();
 
   useEffect(() => {
     // Cleanup URLs when component unmounts

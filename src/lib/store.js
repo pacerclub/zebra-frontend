@@ -8,6 +8,7 @@ const useStore = create(
       isRunning: false,
       startTime: null,
       currentSession: null,
+      lastElapsedTime: 0, // Store the elapsed time when paused
 
       // Projects state
       projects: [],
@@ -22,26 +23,28 @@ const useStore = create(
         const currentProject = get().getCurrentProject();
         if (!currentProject) return;
 
+        const now = Date.now();
         const session = {
           id: Math.random().toString(36).substr(2, 9),
           projectId: currentProject.id,
-          startTime: Date.now(),
+          startTime: now,
           duration: 0,
           records: [],
         };
 
         set({
           isRunning: true,
-          startTime: Date.now(),
+          startTime: now,
           currentSession: session,
+          lastElapsedTime: 0,
         });
       },
 
       stopTimer: () => {
-        const { currentSession, startTime } = get();
+        const { currentSession, startTime, lastElapsedTime } = get();
         if (!currentSession || !startTime) return;
 
-        const duration = Date.now() - startTime;
+        const duration = lastElapsedTime + (Date.now() - startTime);
         const updatedSession = {
           ...currentSession,
           duration,
@@ -49,6 +52,7 @@ const useStore = create(
 
         set((state) => ({
           isRunning: false,
+          lastElapsedTime: duration,
           startTime: null,
           currentSession: null,
           sessions: [...state.sessions, updatedSession],
@@ -143,11 +147,16 @@ const useStore = create(
     }),
     {
       name: 'zebra-store',
+      version: 1,
       partialize: (state) => ({
         projects: state.projects,
         sessions: state.sessions,
         currentProject: state.currentProject,
         files: state.files,
+        isRunning: state.isRunning,
+        startTime: state.startTime,
+        currentSession: state.currentSession,
+        lastElapsedTime: state.lastElapsedTime,
       }),
     }
   )
