@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import api from './api';
 
 const useStore = create(
   persist(
+    // Initial state and actions
     (set, get) => ({
       // Timer state
       isRunning: false,
@@ -14,65 +16,147 @@ const useStore = create(
       projects: [],
       sessions: [],
       records: [],
+      isLoading: false,
+      error: null,
       
       // Files and audio state
       files: {}, // { recordId: { files: [], audioBlob: Blob } }
+      maxStoredFiles: 10, // Maximum number of files to store in memory
 
       // Timer actions
-      startTimer: () => {
-        const currentProject = get().getCurrentProject();
-        if (!currentProject) return;
+      startTimer: async () => {
+        const lastProject = get().projects[get().projects.length - 1]; // Automatically select the last project
+        if (!lastProject) {
+          console.error('No project selected');
+          return;
+        }
 
-        const now = Date.now();
+        const now = new Date();
         const session = {
-          id: Math.random().toString(36).substr(2, 9),
-          projectId: currentProject.id,
-          startTime: now,
+          projectId: lastProject.id,
+          startTime: now.toISOString(),
           duration: 0,
           records: [],
         };
 
+        console.log('Starting new session:', session);
+
         set({
           isRunning: true,
-          startTime: now,
+          startTime: now.getTime(),
           currentSession: session,
           lastElapsedTime: 0,
         });
       },
 
-      stopTimer: () => {
+      stopTimer: async () => {
         const { currentSession, startTime, lastElapsedTime } = get();
-        if (!currentSession || !startTime) return;
+        if (!currentSession || !startTime) {
+          console.error('No active session');
+          return;
+        }
 
         const duration = lastElapsedTime + (Date.now() - startTime);
-        const updatedSession = {
-          ...currentSession,
-          duration,
-        };
+        
+        try {
+          console.log('Creating session:', currentSession);
+          // Save session to backend
+          const response = await api.request(`/projects/${currentSession.projectId}/sessions`, {
+            method: 'POST',
+            body: JSON.stringify({
+              start_time: currentSession.startTime,
+              duration: duration,
+              records: currentSession.records.map(record => ({
+                text: record.text || '',
+                git_link: record.gitLink || '',
+                files: (record.files || []).map(file => ({
+                  name: file.name,
+                  url: file.url,
+                  type: file.type,
+                  size: file.size
+                })),
+                audio_url: record.audioUrl || '',
+                timestamp: record.timestamp || new Date().toISOString()
+              }))
+            })
+          });
 
-        set((state) => ({
-          isRunning: false,
-          lastElapsedTime: duration,
-          startTime: null,
-          currentSession: null,
-          sessions: [...state.sessions, updatedSession],
-        }));
+          console.log('Session created:', response);
+
+          // Fetch updated sessions after creation
+          await get().loadProjects();
+
+          // Update local state
+          set((state) => ({
+            isRunning: false,
+            lastElapsedTime: duration,
+            startTime: null,
+            currentSession: null,
+            sessions: [...state.sessions, { ...currentSession, duration }],
+            error: null
+          }));
+        } catch (error) {
+          console.error('Failed to save session:', error);
+          // Still stop the timer but show error
+          set({
+            isRunning: false,
+            lastElapsedTime: duration,
+            startTime: null,
+            currentSession: null,
+            error: 'Failed to save session'
+          });
+        }
       },
 
       // Project actions
-      addProject: (name) => {
-        const project = {
-          id: Math.random().toString(36).substr(2, 9),
-          name,
-          createdAt: Date.now(),
-        };
+      addProject: async (name, description = '') => {
+        try {
+          const project = await api.createProject(name, description);
+          set((state) => ({
+            projects: [...state.projects, project],
+            currentProject: project,
+          }));
+          return project;
+        } catch (error) {
+          console.error('Failed to create project:', error);
+          throw error;
+        }
+      },
 
-        set((state) => ({
-          projects: [...state.projects, project],
-          currentProject: project,
-        }));
+      loadProjects: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const projects = await api.getProjects();
+          
+          // Load sessions for each project
+          const projectsWithSessions = await Promise.all(
+            projects.map(async (project) => {
+              try {
+                const data = await api.getProject(project.id);
+                return { ...project, sessions: data.sessions || [] };
+              } catch (error) {
+                console.error(`Failed to load sessions for project ${project.id}:`, error);
+                return { ...project, sessions: [] };
+              }
+            })
+          );
 
-        return project;
+          set({ 
+            projects: projectsWithSessions,
+            sessions: projectsWithSessions.flatMap(p => p.sessions),
+            currentProject: projectsWithSessions.length > 0 ? projectsWithSessions[0] : null,
+            isLoading: false,
+            error: null
+          });
+          return projectsWithSessions;
+        } catch (error) {
+          console.error('Failed to load projects:', error);
+          set({ 
+            isLoading: false, 
+            error: error.message || 'Failed to load projects'
+          });
+          throw error;
+        }
       },
 
       setCurrentProject: (projectId) => {
@@ -105,27 +189,44 @@ const useStore = create(
       },
 
       // Record actions
-      addRecord: (record) => {
+      addRecord: async (record) => {
         const { currentSession } = get();
         if (!currentSession) return;
 
         const newRecord = {
           ...record,
           id: Math.random().toString(36).substr(2, 9),
-          timestamp: Date.now(),
+          timestamp: new Date().toISOString(), // Convert to ISO string instead of timestamp
         };
 
         // Store files and audio in the files object
         if ((record.files?.length > 0 || record.audioBlob) && newRecord.id) {
-          set((state) => ({
-            files: {
-              ...state.files,
-              [newRecord.id]: {
-                files: record.files || [],
-                audioBlob: record.audioBlob,
-              },
-            },
-          }));
+          set((state) => {
+            // Get all record IDs sorted by timestamp
+            const recordIds = Object.keys(state.files);
+            
+            // If we have more than maxStoredFiles, remove the oldest ones
+            const filesToKeep = {};
+            if (recordIds.length >= state.maxStoredFiles) {
+              recordIds
+                .sort((a, b) => state.files[b].timestamp - state.files[a].timestamp)
+                .slice(0, state.maxStoredFiles - 1)
+                .forEach(id => {
+                  filesToKeep[id] = state.files[id];
+                });
+            } else {
+              Object.assign(filesToKeep, state.files);
+            }
+
+            // Add the new record
+            filesToKeep[newRecord.id] = {
+              files: record.files || [],
+              audioBlob: record.audioBlob,
+              timestamp: newRecord.timestamp
+            };
+
+            return { files: filesToKeep };
+          });
         }
 
         set((state) => ({
@@ -147,16 +248,35 @@ const useStore = create(
     }),
     {
       name: 'zebra-store',
-      version: 1,
+      version: 2,
+      migrate: (persistedState, version) => {
+        if (version === 1) {
+          return {
+            ...persistedState,
+            projects: [],
+            currentProject: null,
+          };
+        }
+        return persistedState;
+      },
       partialize: (state) => ({
+        // Only persist essential data
         projects: state.projects,
         sessions: state.sessions,
         currentProject: state.currentProject,
-        files: state.files,
         isRunning: state.isRunning,
         startTime: state.startTime,
-        currentSession: state.currentSession,
+        currentSession: state.currentSession && {
+          ...state.currentSession,
+          // Don't persist files/audio in the session
+          records: state.currentSession.records?.map(r => ({
+            ...r,
+            files: [],
+            audioBlob: null
+          })) || []
+        },
         lastElapsedTime: state.lastElapsedTime,
+        maxStoredFiles: state.maxStoredFiles
       }),
     }
   )

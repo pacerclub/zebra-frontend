@@ -1,32 +1,26 @@
 'use client';
 
-import Timer from '@/components/Timer';
-import ProjectSelector from '@/components/ProjectSelector';
-import RecordInput from '@/components/RecordInput';
-import { Card, CardContent } from '@/components/ui/card';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import useAuthStore from '@/lib/authStore';
 
-export default function Home() {
-  return (
-    <div className="container mx-auto py-8 max-w-2xl">
-      <div className="space-y-8">
-        <Card>
-          <CardContent className="pt-6">
-            <ProjectSelector />
-          </CardContent>
-        </Card>
+export default function HomePage() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthStore();
 
-        <Card>
-          <CardContent className="pt-6">
-            <Timer />
-          </CardContent>
-        </Card>
+  useEffect(() => {
+    // Initialize auth store
+    useAuthStore.getState().init();
+  }, []);
 
-        <Card>
-          <CardContent className="pt-6">
-            <RecordInput />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    const token = localStorage.getItem('zebra-token');
+    if (!token || !isAuthenticated) {
+      router.replace('/auth/login');
+    } else {
+      router.replace('/timer');
+    }
+  }, [isAuthenticated, router]);
+
+  return null;
 }
