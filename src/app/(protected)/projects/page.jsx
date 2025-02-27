@@ -9,22 +9,43 @@ export default function ProjectsPage() {
   const router = useRouter();
   const { projects, getSessionsByProjectId, isLoading, error } = useStore();
 
-  const getProjectStats = (projectId) => {
-    const sessions = getSessionsByProjectId(projectId);
-    const totalTime = sessions.reduce((acc, session) => acc + (session.duration || 0), 0);
-    return {
-      sessions: sessions.length,
-      totalTime,
-      lastActive: sessions.length > 0 
-        ? Math.max(...sessions.map(s => s.startTime))
-        : null
-    };
+  const formatDuration = (totalSeconds) => {
+    if (!totalSeconds || isNaN(totalSeconds)) return '0h 0m';
+    
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    
+    return `${hours}h ${minutes}m`;
   };
 
-  const formatDuration = (ms) => {
-    const hours = Math.floor(ms / 1000 / 60 / 60);
-    const minutes = Math.floor((ms / 1000 / 60) % 60);
-    return `${hours}h ${minutes}m`;
+  const calculateTotalTime = (project) => {
+    if (!project || !project.sessions) return 0;
+    
+    return project.sessions.reduce((total, session) => {
+      return total + (session.duration || 0);
+    }, 0);
+  };
+
+  const getSessionCount = (project) => {
+    if (!project || !project.sessions) return 0;
+    
+    return project.sessions.filter(session => 
+      session && session.id && session.id !== '00000000-0000-0000-0000-000000000000'
+    ).length;
+  };
+
+  const getProjectStats = (projectId) => {
+    const project = projects.find(project => project.id === projectId);
+    const totalTime = calculateTotalTime(project);
+    const sessions = getSessionCount(project);
+    const lastActive = sessions > 0 
+      ? Math.max(...project.sessions.map(s => s.startTime))
+      : null;
+    return {
+      sessions,
+      totalTime,
+      lastActive
+    };
   };
 
   return (

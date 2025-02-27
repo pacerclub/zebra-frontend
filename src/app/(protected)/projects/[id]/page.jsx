@@ -36,26 +36,32 @@ export default function ProjectPage() {
         }
 
         // Transform sessions data
-        const validSessions = (data.sessions || []).map(session => ({
-          id: session.id,
-          startTime: session.start_time || session.startTime,
-          endTime: session.end_time || session.endTime,
-          duration: session.duration || 0,
-          records: (session.records || []).map(record => ({
-            id: record.id,
-            text: record.text || '',
-            gitLink: record.git_link || '',
-            audioUrl: record.audio_url || '',
-            timestamp: record.timestamp || record.created_at || new Date().toISOString(),
-            files: (record.files || []).map(file => ({
-              id: file.id,
-              name: file.name || 'Unnamed file',
-              url: file.url || '',
-              type: file.type || 'application/octet-stream',
-              size: file.size || 0
-            }))
-          }))
-        })).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+        const validSessions = (data.sessions || [])
+          .filter(session => session.id && session.records && session.records.length > 0)
+          .map(session => ({
+            id: session.id,
+            startTime: session.start_time || session.startTime,
+            endTime: session.end_time || session.endTime,
+            duration: session.duration || 0,
+            records: (session.records || [])
+              .filter(record => record.id)
+              .map(record => ({
+                id: record.id,
+                text: record.text || '',
+                gitLink: record.git_link || '',
+                audioUrl: record.audioUrl || '',
+                timestamp: record.timestamp || record.created_at || new Date().toISOString(),
+                files: (record.files || [])
+                  .filter(file => file.id && file.url)
+                  .map(file => ({
+                    id: file.id,
+                    name: file.name || 'Unnamed file',
+                    url: file.url || '',
+                    type: file.type || 'application/octet-stream',
+                    size: file.size || 0
+                  }))
+              }))
+          })).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
 
         setProject(data.project);
         setSessions(validSessions);
@@ -146,61 +152,69 @@ export default function ProjectPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handlePlayAudio = async (recordId) => {
+  const handlePlayAudio = async (record) => {
     try {
-      // Stop current audio if playing
+      if (playingRecordId === record.id) {
+        // If the same record is clicked, toggle play/pause
+        if (audioElement) {
+          if (audioElement.paused) {
+            audioElement.play();
+          } else {
+            audioElement.pause();
+          }
+        }
+        return;
+      }
+
+      // Stop any currently playing audio
       if (audioElement) {
         audioElement.pause();
         audioElement.src = '';
-        if (playingRecordId === recordId) {
-          setPlayingRecordId(null);
-          setAudioElement(null);
-          return;
-        }
       }
 
-      const record = sessions
-        .flatMap((s) => s.records)
-        .find((r) => r.id === recordId);
-
-      if (!record?.audioUrl || record.audioUrl === '00000000-0000-0000-0000-000000000000') {
+      if (!record.id) {
         toast.error('No audio available for this record');
         return;
       }
 
+      setPlayingRecordId(record.id);
+      
       // Show loading state
       const loadingToast = toast.loading('Loading audio...');
 
       try {
-        // Fetch audio blob from API
-        const audioBlob = await api.getAudio(record.audioUrl);
+        console.log('Attempting to fetch audio for record:', record.id);
+        // Fetch the audio blob
+        const audioBlob = await api.getAudio(record.id);
         if (!audioBlob) {
+          setPlayingRecordId(null);
           toast.error('Failed to load audio');
           return;
         }
 
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        // Create and play new audio
-        const audio = new Audio(audioUrl);
-        try {
-          await audio.play();
-          setAudioElement(audio);
-          setPlayingRecordId(recordId);
-          toast.success('Playing audio');
-
-          // Reset when done playing and cleanup URL
-          audio.onended = () => {
-            setPlayingRecordId(null);
-            setAudioElement(null);
-            URL.revokeObjectURL(audioUrl);
-          };
-        } catch (error) {
-          console.error('Failed to play audio:', error);
-          URL.revokeObjectURL(audioUrl);
+        // Create audio element
+        const audio = new Audio(URL.createObjectURL(audioBlob));
+        audio.onended = () => {
+          setPlayingRecordId(null);
+          setAudioElement(null);
+        };
+        audio.onerror = (e) => {
+          console.error('Audio error:', e);
+          setPlayingRecordId(null);
+          setAudioElement(null);
           toast.error('Failed to play audio');
-          throw error;
-        }
+        };
+
+        // Play the audio
+        await audio.play();
+        setAudioElement(audio);
+        toast.success('Playing audio');
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        setPlayingRecordId(null);
+        setAudioElement(null);
+        toast.error('Failed to play audio');
+        throw error;
       } finally {
         toast.dismiss(loadingToast);
       }
@@ -415,7 +429,7 @@ export default function ProjectPage() {
                               variant="outline"
                               size="sm"
                               className="gap-2"
-                              onClick={() => handlePlayAudio(record.id)}
+                              onClick={() => handlePlayAudio(record)}
                             >
                               {playingRecordId === record.id ? (
                                 <>

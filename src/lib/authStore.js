@@ -2,9 +2,19 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import api from './api';
 
-// Initialize API client with token from localStorage
+// Initialize API client with token from localStorage or cookie
 if (typeof window !== 'undefined') {
-  const token = localStorage.getItem('zebra-token');
+  // Try to get token from localStorage first, then from cookie as fallback
+  let token = localStorage.getItem('zebra-token');
+  if (!token) {
+    // Try to get from cookie
+    const tokenCookie = document.cookie.split('; ').find(row => row.startsWith('zebra-token='));
+    if (tokenCookie) {
+      token = tokenCookie.split('=')[1];
+      // Sync localStorage with cookie
+      localStorage.setItem('zebra-token', token);
+    }
+  }
   if (token) {
     api.setToken(token);
   }
@@ -19,19 +29,31 @@ const useAuthStore = create(
       error: null,
 
       init: () => {
-        const token = localStorage.getItem('zebra-token');
+        // Try to get token from localStorage first, then from cookie as fallback
+        let token = localStorage.getItem('zebra-token');
+        if (!token) {
+          // Try to get from cookie
+          const tokenCookie = document.cookie.split('; ').find(row => row.startsWith('zebra-token='));
+          if (tokenCookie) {
+            token = tokenCookie.split('=')[1];
+            // Sync localStorage with cookie
+            localStorage.setItem('zebra-token', token);
+          }
+        }
+        
         if (token) {
-          // Set both localStorage and cookie
-          document.cookie = `zebra-token=${token}; path=/; secure; samesite=strict`;
+          // Set both localStorage and cookie with proper attributes for cross-browser compatibility
+          localStorage.setItem('zebra-token', token);
+          document.cookie = `zebra-token=${token}; path=/; max-age=31536000`;
           api.setToken(token);
           set({ isAuthenticated: true });
         }
       },
 
       setAuthState: (user, token) => {
-        // Set both localStorage and cookie
+        // Set both localStorage and cookie with proper attributes for cross-browser compatibility
         localStorage.setItem('zebra-token', token);
-        document.cookie = `zebra-token=${token}; path=/; secure; samesite=strict`;
+        document.cookie = `zebra-token=${token}; path=/; max-age=31536000`;
         api.setToken(token);
         set({
           user,

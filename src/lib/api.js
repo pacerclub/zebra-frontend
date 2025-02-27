@@ -4,13 +4,21 @@ class ApiClient {
   constructor() {
     this.token = null;
     if (typeof window !== 'undefined') {
-      // Get token from localStorage and ensure it's valid
-      const token = localStorage.getItem('zebra-token') || document.cookie.split('; ').find(row => row.startsWith('zebra-token='))?.split('=')[1];
+      // Try to get token from localStorage first, then from cookie as fallback
+      let token = localStorage.getItem('zebra-token');
+      if (!token) {
+        // Try to get from cookie
+        const tokenCookie = document.cookie.split('; ').find(row => row.startsWith('zebra-token='));
+        if (tokenCookie) {
+          token = tokenCookie.split('=')[1];
+        }
+      }
+      
       if (token) {
         this.token = token;
         // Ensure both localStorage and cookie are set
         localStorage.setItem('zebra-token', token);
-        document.cookie = `zebra-token=${token}; path=/; secure; samesite=strict`;
+        document.cookie = `zebra-token=${token}; path=/; max-age=31536000`;
       } else {
         localStorage.removeItem('zebra-token');
         document.cookie = 'zebra-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
@@ -22,8 +30,8 @@ class ApiClient {
     this.token = token;
     if (typeof window !== 'undefined') {
       localStorage.setItem('zebra-token', token);
-      // Also set cookie for cross-browser support
-      document.cookie = `zebra-token=${token}; path=/; secure; samesite=strict`;
+      // Set cookie with more compatible settings
+      document.cookie = `zebra-token=${token}; path=/; max-age=31536000`;
     }
   }
 
@@ -31,7 +39,7 @@ class ApiClient {
     this.token = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('zebra-token');
-      // Also clear cookie
+      // Clear cookie
       document.cookie = 'zebra-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
     }
   }
@@ -49,50 +57,59 @@ class ApiClient {
     try {
       const url = `${API_BASE_URL}/${endpoint}`;
       console.log(`Making request to: ${url}`);
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          this.clearToken();
-          throw new Error('Unauthorized');
-        }
-        const errorText = await response.text();
-        console.error(`HTTP error! status: ${response.status}, body:`, errorText);
-        throw new Error(`Request failed: ${response.statusText || response.status}`);
-      }
-
-      if (isBlob) {
-        return await response.blob();
-      }
-
-      const text = await response.text();
-      console.log(`Response from ${endpoint}:`, text);
-
-      let data;
+      
+      // Add error handling for network issues
       try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        console.error('Failed to parse JSON response:', e);
-        throw new Error('Invalid JSON response from server');
-      }
+        const response = await fetch(url, {
+          ...options,
+          headers,
+        });
 
-      if (!response.ok) {
-        throw new Error(data?.error || `HTTP error! status: ${response.status}`);
-      }
+        if (!response.ok) {
+          if (response.status === 401) {
+            this.clearToken();
+            throw new Error('Unauthorized');
+          }
 
-      return data;
+          const errorText = await response.text();
+          try {
+            const errorJson = JSON.parse(errorText);
+            throw new Error(errorJson.error || `Request failed with status ${response.status}`);
+          } catch (e) {
+            throw new Error(`Request failed with status ${response.status}: ${errorText.substring(0, 100)}`);
+          }
+        }
+
+        if (isBlob) {
+          return await response.blob();
+        }
+
+        // Check if response is empty
+        const text = await response.text();
+        if (!text) {
+          return null;
+        }
+
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error('Failed to parse JSON response:', e);
+          return text;
+        }
+      } catch (networkError) {
+        console.error('Network error:', networkError);
+        // Check if the server is running
+        throw new Error(`Network error: ${networkError.message}. Please check if the server is running.`);
+      }
     } catch (error) {
-      console.error(`Error in request to ${endpoint}:`, error);
+      console.error(`API request error for ${endpoint}:`, error);
       throw error;
     }
   }
 
   // Auth endpoints
   async register(email, password, name) {
-    const data = await this.request('/auth/register', {
+    const data = await this.request('/users/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     });
@@ -101,10 +118,12 @@ class ApiClient {
   }
 
   async login(email, password) {
-    const data = await this.request('/auth/login', {
+    console.log('Attempting login with:', { email });
+    const data = await this.request('/users/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
+    console.log('Login response:', data);
     this.setToken(data.token);
     return data;
   }
@@ -156,24 +175,41 @@ class ApiClient {
       if (!project) return null;
 
       // Transform the response to match frontend expectations
-      const sessions = (project.sessions || []).map(session => ({
-        ...session,
-        startTime: session.start_time || session.startTime,
-        endTime: session.end_time || session.endTime,
-        duration: session.duration || (session.end_time && session.start_time ? 
-          new Date(session.end_time) - new Date(session.start_time) : 0),
-        records: (session.records || []).map(record => ({
-          ...record,
-          files: (record.files || []).map(file => ({
-            ...file,
-            id: file.id || file.url?.split('/').pop(),
-            url: file.url || (file.id && file.id !== '00000000-0000-0000-0000-000000000000' ? `${API_BASE_URL}/files/${file.id}` : null),
-            type: file.type || file.mime_type || 'unknown'
-          })).filter(f => f.id && f.id !== '00000000-0000-0000-0000-000000000000'),
-          audioUrl: record.audio_url || (record.id && record.id !== '00000000-0000-0000-0000-000000000000' ? `${API_BASE_URL}/audio/${record.id}` : null),
-          timestamp: record.timestamp || record.created_at || new Date().toISOString()
-        }))
-      }));
+      const sessions = (project.sessions || []).map(session => {
+        // Parse dates with timezone handling
+        const startTime = new Date(session.start_time || session.startTime);
+        const endTime = new Date(session.end_time || session.endTime);
+        
+        // Use the duration directly from the server if available
+        let duration = session.duration;
+        
+        // If no duration is provided, calculate it in seconds
+        if (!duration && startTime && endTime && startTime.getTime() > 0 && endTime.getTime() > 0) {
+          duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+        }
+        
+        return {
+          ...session,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          duration: duration || 0,
+          records: (session.records || [])
+            .filter(record => record.id && record.id !== '00000000-0000-0000-0000-000000000000')
+            .map(record => ({
+              ...record,
+              files: (record.files || [])
+                .filter(file => file.id && file.id !== '00000000-0000-0000-0000-000000000000')
+                .map(file => ({
+                  ...file,
+                  id: file.id,
+                  url: file.url || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/files/${file.id}`,
+                  type: file.type || file.mime_type || 'unknown'
+                })),
+              audioUrl: record.audio_url || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/audio/${record.id}`,
+              timestamp: record.timestamp || record.created_at || new Date().toISOString()
+            }))
+        };
+      });
 
       return {
         project: {
@@ -193,36 +229,76 @@ class ApiClient {
       console.error('Invalid file ID');
       return null;
     }
+    
     try {
-      return await this.request(`files/${fileId}`, {
+      // Clean the ID to ensure it's just the UUID
+      const cleanId = fileId.toString().replace(/^\/files\//, '').replace(/^files\//, '');
+      console.log(`Fetching file with ID: ${cleanId}`);
+      
+      // Direct fetch approach - using the new route
+      const url = `${API_BASE_URL.replace('/api/v1', '')}/files/${cleanId}`;
+      console.log(`Making direct request to: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Accept': 'application/octet-stream',
+          'Accept': '*/*',
+          ...(this.token ? { 'Authorization': `Bearer ${this.token}` } : {})
         },
-      }, true);
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to fetch file: ${response.status} ${response.statusText}`, errorText);
+        throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      console.log(`Successfully fetched file, size: ${blob.size} bytes`);
+      return blob;
     } catch (error) {
       console.error('Error fetching file:', error);
-      return null;
+      throw error;
     }
   }
 
-  async getAudio(audioId) {
-    if (!audioId || audioId === '00000000-0000-0000-0000-000000000000') {
-      console.error('Invalid audio ID');
+  async getAudio(recordId) {
+    if (!recordId || recordId === '00000000-0000-0000-0000-000000000000') {
+      console.error('Invalid record ID');
       return null;
     }
+    
     try {
-      // Remove any path prefix if present
-      audioId = audioId.replace(/^\/audio\//, '').replace(/^audio\//, '');
-      return await this.request(`audio/${audioId}`, {
+      // Clean the ID to ensure it's just the UUID
+      const cleanId = recordId.toString().replace(/^\/audio\//, '').replace(/^audio\//, '');
+      console.log(`Fetching audio for record ID: ${cleanId}`);
+      
+      // Direct fetch approach - using the new route
+      const url = `${API_BASE_URL.replace('/api/v1', '')}/audio/${cleanId}`;
+      console.log(`Making direct request to: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Accept': 'audio/*',
+          ...(this.token ? { 'Authorization': `Bearer ${this.token}` } : {})
         },
-      }, true);
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to fetch audio: ${response.status} ${response.statusText}`, errorText);
+        throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      console.log(`Successfully fetched audio, size: ${blob.size} bytes`);
+      return blob;
     } catch (error) {
       console.error('Error fetching audio:', error);
-      return null;
+      throw error;
     }
   }
 
